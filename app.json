@@ -1,0 +1,9 @@
+{
+  "name": "tempApp",
+  "displayName": "untitled",
+  "extra": {
+    "eas": {
+      "projectId": "b8bb2f05-3b87-4fa1-b373-b7b4f7961af3"
+    }
+  }
+}

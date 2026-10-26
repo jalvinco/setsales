@@ -1,0 +1,22 @@
+{
+  "name": "untitled",
+  "version": "0.0.1",
+  "private": true,
+  "scripts": {
+    "android": "react-native run-android",
+    "ios": "react-native run-ios",
+    "start": "react-native start",
+    "bundle:android": "npx react-native bundle --platform android --dev false --entry-file index.js --bundle-output android/app/src/main/assets/index.android.bundle --assets-dest android/app/src/main/res",
+    "build:apk": "npx react-native bundle --platform android --dev false --entry-file index.js --bundle-output android/app/src/main/assets/index.android.bundle --assets-dest android/app/src/main/res && cd android && .\\gradlew assembleRelease"
+  },
+  "dependencies": {
+    "react": "19.3.0",
+    "react-native": "0.87.1"
+  },
+  "devDependencies": {
+    "@babel/core": "^7.25.2",
+    "@react-native-community/cli": "latest",
+    "@react-native/babel-preset": "0.87.1",
+    "@react-native/metro-config": "0.87.1"
+  }
+}
