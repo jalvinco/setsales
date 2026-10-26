@@ -9,7 +9,6 @@ import {
   StyleSheet,
   Alert,
   Modal,
-  KeyboardAvoidingView,
   Platform,
   TouchableWithoutFeedback,
   Keyboard,
@@ -28,7 +27,7 @@ import {
   setInventoryRecipes,
 } from '../services/supabase';
 
-const InventoryScreen = ({ onBack, loggedInUser, rolePermissions = [] }) => {
+const InventoryScreen = ({ onBack, loggedInUser, rolePermissions = [], isDarkMode = false }) => {
   // Tab state: 'list' | 'add'
   const [activeTab, setActiveTab] = useState('list');
 
@@ -89,11 +88,11 @@ const InventoryScreen = ({ onBack, loggedInUser, rolePermissions = [] }) => {
         fetchItemRecipes(),
         fetchItemModifierRecipes(),
       ]);
-      setInventoryList(inv || []);
-      setProductsList(itms || []);
-      setModifiersList(mods || []);
-      setItemRecipes(iRecipes || []);
-      setModRecipes(mRecipes || []);
+      setInventoryList(Array.isArray(inv) ? inv : []);
+      setProductsList(Array.isArray(itms) ? itms : []);
+      setModifiersList(Array.isArray(mods) ? mods : []);
+      setItemRecipes(Array.isArray(iRecipes) ? iRecipes : []);
+      setModRecipes(Array.isArray(mRecipes) ? mRecipes : []);
     } catch (e) {
       Alert.alert('Error', e.message);
     } finally {
@@ -102,106 +101,105 @@ const InventoryScreen = ({ onBack, loggedInUser, rolePermissions = [] }) => {
   };
 
   const combinedTargetList = [
-    ...productsList.map((p) => ({
+    ...(productsList || []).filter(Boolean).map((p) => ({
       id: `item_${p.id}`,
       rawId: p.id,
       type: 'item',
-      name: p.name,
+      name: p.name || 'Product',
     })),
-    ...modifiersList.map((m) => ({
+    ...(modifiersList || []).filter(Boolean).map((m) => ({
       id: `mod_${m.id}`,
       rawId: m.id,
       type: 'modifier',
-      name: m.name,
+      name: m.name || 'Modifier',
     })),
   ];
 
   const toggleLinkTarget = (target) => {
+    if (!target) return;
     if (target.type === 'item') {
-      const exists = linkedItemRecipes.some((r) => String(r.item_id) === String(target.rawId));
+      const exists = (linkedItemRecipes || []).some((r) => r && String(r.item_id) === String(target.rawId));
       if (exists) {
-        setLinkedItemRecipes((prev) => prev.filter((r) => String(r.item_id) !== String(target.rawId)));
+        setLinkedItemRecipes((prev) => (prev || []).filter((r) => r && String(r.item_id) !== String(target.rawId)));
       } else {
         setLinkedItemRecipes((prev) => [
-          ...prev,
+          ...(prev || []),
           { item_id: target.rawId, quantity_used: 1.0, itemName: target.name },
         ]);
       }
     } else {
-      const exists = linkedModRecipes.some((r) => String(r.modifier_id) === String(target.rawId));
+      const exists = (linkedModRecipes || []).some((r) => r && String(r.modifier_id) === String(target.rawId));
       if (exists) {
-        setLinkedModRecipes((prev) => prev.filter((r) => String(r.modifier_id) !== String(target.rawId)));
+        setLinkedModRecipes((prev) => (prev || []).filter((r) => r && String(r.modifier_id) !== String(target.rawId)));
       } else {
         setLinkedModRecipes((prev) => [
-          ...prev,
+          ...(prev || []),
           { modifier_id: target.rawId, quantity_used: 0.1, modName: target.name },
         ]);
       }
-    }
-  };
-
-  const updateLinkedQty = (target, qtyVal) => {
-    if (target.type === 'item') {
-      setLinkedItemRecipes((prev) =>
-        prev.map((r) => (String(r.item_id) === String(target.rawId) ? { ...r, quantity_used: qtyVal } : r))
-      );
-    } else {
-      setLinkedModRecipes((prev) =>
-        prev.map((r) => (String(r.modifier_id) === String(target.rawId) ? { ...r, quantity_used: qtyVal } : r))
-      );
     }
   };
 
   const toggleEditLinkTarget = (target) => {
+    if (!target) return;
     if (target.type === 'item') {
-      const exists = editLinkedItemRecipes.some((r) => String(r.item_id) === String(target.rawId));
+      const exists = (editLinkedItemRecipes || []).some((r) => r && String(r.item_id) === String(target.rawId));
       if (exists) {
-        setEditLinkedItemRecipes((prev) => prev.filter((r) => String(r.item_id) !== String(target.rawId)));
+        setEditLinkedItemRecipes((prev) => (prev || []).filter((r) => r && String(r.item_id) !== String(target.rawId)));
       } else {
         setEditLinkedItemRecipes((prev) => [
-          ...prev,
+          ...(prev || []),
           { item_id: target.rawId, quantity_used: 1.0, itemName: target.name },
         ]);
       }
     } else {
-      const exists = editLinkedModRecipes.some((r) => String(r.modifier_id) === String(target.rawId));
+      const exists = (editLinkedModRecipes || []).some((r) => r && String(r.modifier_id) === String(target.rawId));
       if (exists) {
-        setEditLinkedModRecipes((prev) => prev.filter((r) => String(r.modifier_id) !== String(target.rawId)));
+        setEditLinkedModRecipes((prev) => (prev || []).filter((r) => r && String(r.modifier_id) !== String(target.rawId)));
       } else {
         setEditLinkedModRecipes((prev) => [
-          ...prev,
+          ...(prev || []),
           { modifier_id: target.rawId, quantity_used: 0.1, modName: target.name },
         ]);
       }
     }
   };
 
-  const updateEditLinkedQty = (target, qtyVal) => {
-    if (target.type === 'item') {
-      setEditLinkedItemRecipes((prev) =>
-        prev.map((r) => (String(r.item_id) === String(target.rawId) ? { ...r, quantity_used: qtyVal } : r))
-      );
-    } else {
-      setEditLinkedModRecipes((prev) =>
-        prev.map((r) => (String(r.modifier_id) === String(target.rawId) ? { ...r, quantity_used: qtyVal } : r))
-      );
-    }
+  const handleUpdateItemQtyUsed = (itemId, val) => {
+    const parsed = Number(val) || 0;
+    setLinkedItemRecipes((prev) =>
+      (prev || []).map((r) => (r && String(r.item_id) === String(itemId) ? { ...r, quantity_used: parsed } : r))
+    );
+  };
+
+  const handleUpdateModQtyUsed = (modId, val) => {
+    const parsed = Number(val) || 0;
+    setLinkedModRecipes((prev) =>
+      (prev || []).map((r) => (r && String(r.modifier_id) === String(modId) ? { ...r, quantity_used: parsed } : r))
+    );
+  };
+
+  const handleUpdateEditItemQtyUsed = (itemId, val) => {
+    const parsed = Number(val) || 0;
+    setEditLinkedItemRecipes((prev) =>
+      (prev || []).map((r) => (r && String(r.item_id) === String(itemId) ? { ...r, quantity_used: parsed } : r))
+    );
+  };
+
+  const handleUpdateEditModQtyUsed = (modId, val) => {
+    const parsed = Number(val) || 0;
+    setEditLinkedModRecipes((prev) =>
+      (prev || []).map((r) => (r && String(r.modifier_id) === String(modId) ? { ...r, quantity_used: parsed } : r))
+    );
   };
 
   const handleAddInventory = async () => {
     const trimmed = invName.trim();
     if (!trimmed) {
-      Alert.alert('Required Field Missing', 'Please enter an Inventory Item Name.');
+      Alert.alert('Required Field Missing', 'Please enter Inventory Item Name.');
       return;
     }
-    const parsedQty = Number(invQuantity);
-    if (isNaN(parsedQty)) {
-      Alert.alert('Invalid Quantity', 'Please enter a valid numeric quantity.');
-      return;
-    }
-    const parsedWarnQty = Number(invWarningQty) || 5.0;
-
-    const exists = inventoryList.some((i) => i.name.toLowerCase() === trimmed.toLowerCase());
+    const exists = (inventoryList || []).some((i) => i && i.name && i.name.toLowerCase() === trimmed.toLowerCase());
     if (exists) {
       Alert.alert('Duplicate Name', 'An inventory item with this name already exists.');
       return;
@@ -212,33 +210,23 @@ const InventoryScreen = ({ onBack, loggedInUser, rolePermissions = [] }) => {
     try {
       const created = await createInventory({
         name: trimmed,
-        quantity: parsedQty,
+        quantity: Number(invQuantity) || 0,
         measure: invMeasure.trim() || 'pcs',
-        warning_quantity: parsedWarnQty,
+        warning_quantity: Number(invWarningQty) || 5.0,
       });
 
       if (created && created.id) {
-        const itemPayload = linkedItemRecipes.map((r) => ({
-          item_id: r.item_id,
-          quantity_used: Number(r.quantity_used) || 1.0,
-        }));
-        const modPayload = linkedModRecipes.map((r) => ({
-          modifier_id: r.modifier_id,
-          quantity_used: Number(r.quantity_used) || 0.1,
-        }));
-        await setInventoryRecipes(created.id, itemPayload, modPayload);
+        await setInventoryRecipes(created.id, linkedItemRecipes, linkedModRecipes);
       }
 
       await loadAllInventoryData();
-
       setInvName('');
       setInvQuantity('10.0');
-      setInvMeasure('pcs');
       setInvWarningQty('5.0');
       setLinkedItemRecipes([]);
       setLinkedModRecipes([]);
       setActiveTab('list');
-      triggerToast('Inventory item saved successfully!');
+      triggerToast('Inventory stock item saved successfully!');
       Keyboard.dismiss();
     } catch (e) {
       Alert.alert('Error', e.message);
@@ -247,71 +235,50 @@ const InventoryScreen = ({ onBack, loggedInUser, rolePermissions = [] }) => {
     }
   };
 
-  const handleOpenEdit = (item) => {
-    setEditingInv(item);
-    setEditName(item.name || '');
-    setEditQuantity(String(item.quantity || 0.0));
-    setEditMeasure(item.measure || 'pcs');
-    setEditWarningQty(String(item.warning_quantity ?? 5.0));
+  const handleOpenEdit = (inv) => {
+    if (!inv) return;
+    setEditingInv(inv);
+    setEditName(inv.name || '');
+    setEditQuantity(String(inv.quantity || 0));
+    setEditMeasure(inv.measure || 'pcs');
+    setEditWarningQty(String(inv.warning_quantity ?? 5.0));
 
-    const linkedItms = itemRecipes
-      .filter((r) => String(r.inventory_id) === String(item.id))
+    const currentItemRecipes = (itemRecipes || [])
+      .filter((r) => r && String(r.inventory_id) === String(inv.id))
       .map((r) => {
-        const prod = productsList.find((p) => String(p.id) === String(r.item_id));
-        return {
-          item_id: r.item_id,
-          quantity_used: r.quantity_used,
-          itemName: prod ? prod.name : 'Product Item',
-        };
+        const prod = (productsList || []).find((p) => p && String(p.id) === String(r.item_id));
+        return { item_id: r.item_id, quantity_used: Number(r.quantity_used) || 1.0, itemName: prod ? prod.name : 'Product' };
       });
-    setEditLinkedItemRecipes(linkedItms);
 
-    const linkedMods = modRecipes
-      .filter((r) => String(r.inventory_id) === String(item.id))
+    const currentModRecipes = (modRecipes || [])
+      .filter((r) => r && String(r.inventory_id) === String(inv.id))
       .map((r) => {
-        const mod = modifiersList.find((m) => String(m.id) === String(r.modifier_id));
-        return {
-          modifier_id: r.modifier_id,
-          quantity_used: r.quantity_used,
-          modName: mod ? mod.name : 'Flavor/Option',
-        };
+        const mod = (modifiersList || []).find((m) => m && String(m.id) === String(r.modifier_id));
+        return { modifier_id: r.modifier_id, quantity_used: Number(r.quantity_used) || 0.1, modName: mod ? mod.name : 'Modifier' };
       });
-    setEditLinkedModRecipes(linkedMods);
+
+    setEditLinkedItemRecipes(currentItemRecipes);
+    setEditLinkedModRecipes(currentModRecipes);
   };
 
   const handleSaveEdit = async () => {
     const trimmed = editName.trim();
     if (!trimmed) {
-      Alert.alert('Required Field Missing', 'Please enter an Inventory Item Name.');
+      Alert.alert('Required Field Missing', 'Please enter Inventory Item Name.');
       return;
     }
-    const parsedQty = Number(editQuantity);
-    if (isNaN(parsedQty)) {
-      Alert.alert('Invalid Quantity', 'Please enter a valid numeric quantity.');
-      return;
-    }
-    const parsedWarnQty = Number(editWarningQty) || 5.0;
 
     setLoadingText('Saving Inventory...');
     setLoading(true);
     try {
       await updateInventory(editingInv.id, {
         name: trimmed,
-        quantity: parsedQty,
+        quantity: Number(editQuantity) || 0,
         measure: editMeasure.trim() || 'pcs',
-        warning_quantity: parsedWarnQty,
+        warning_quantity: Number(editWarningQty) || 5.0,
       });
 
-      const itemPayload = editLinkedItemRecipes.map((r) => ({
-        item_id: r.item_id,
-        quantity_used: Number(r.quantity_used) || 1.0,
-      }));
-      const modPayload = editLinkedModRecipes.map((r) => ({
-        modifier_id: r.modifier_id,
-        quantity_used: Number(r.quantity_used) || 0.1,
-      }));
-
-      await setInventoryRecipes(editingInv.id, itemPayload, modPayload);
+      await setInventoryRecipes(editingInv.id, editLinkedItemRecipes, editLinkedModRecipes);
 
       await loadAllInventoryData();
       setEditingInv(null);
@@ -323,32 +290,30 @@ const InventoryScreen = ({ onBack, loggedInUser, rolePermissions = [] }) => {
     }
   };
 
-  // Quick Stock Addition Handler (accepts decimals e.g. 0.5)
   const handleOpenQuickStock = (item) => {
     setQuickStockInv(item);
     setQuickAddQtyInput('');
   };
 
-  const handleConfirmQuickAddStock = async () => {
-    if (!quickStockInv) return;
-
-    const addedQty = Number(quickAddQtyInput);
-    if (isNaN(addedQty) || addedQty <= 0) {
-      Alert.alert('Invalid Quantity', 'Please enter a valid positive number (e.g., 0.5, 1, 10).');
+  const handleSaveQuickAddStock = async () => {
+    const parsedAdd = Number(quickAddQtyInput) || 0;
+    if (parsedAdd <= 0) {
+      Alert.alert('Invalid Quantity', 'Please enter a valid positive quantity e.g. 0.5 or 10.');
       return;
     }
 
     const currentQty = Number(quickStockInv.quantity) || 0;
-    const newQty = currentQty + addedQty;
+    const newQty = currentQty + parsedAdd;
 
     setLoadingText('Adding Stock...');
     setLoading(true);
     try {
       await updateInventory(quickStockInv.id, { quantity: newQty });
       await loadAllInventoryData();
+      const itemName = quickStockInv.name;
       setQuickStockInv(null);
       setQuickAddQtyInput('');
-      triggerToast(`Added +${addedQty} to ${quickStockInv.name}. New total: ${newQty.toFixed(2)}`);
+      triggerToast(`Added +${parsedAdd} to ${itemName}. New total: ${newQty.toFixed(2)}`);
     } catch (e) {
       Alert.alert('Error', e.message);
     } finally {
@@ -357,16 +322,17 @@ const InventoryScreen = ({ onBack, loggedInUser, rolePermissions = [] }) => {
   };
 
   const handleDeleteConfirm = (item) => {
+    if (!item) return;
     Alert.alert(
       'Delete Inventory Item',
-      `Are you sure you want to delete "${item.name}"?`,
+      `Are you sure you want to delete inventory item "${item.name}"?`,
       [
         { text: 'Cancel', style: 'cancel' },
         {
           text: 'Delete',
           style: 'destructive',
           onPress: async () => {
-            setLoadingText('Deleting Inventory...');
+            setLoadingText('Saving Inventory...');
             setLoading(true);
             try {
               await deleteInventory(item.id);
@@ -384,34 +350,44 @@ const InventoryScreen = ({ onBack, loggedInUser, rolePermissions = [] }) => {
     );
   };
 
-  const renderInventoryCard = ({ item }) => {
-    const warnLimit = Number(item.warning_quantity ?? 5.0);
-    const isLowStock = Number(item.quantity) <= warnLimit;
+  const bgStyle = { backgroundColor: isDarkMode ? '#0F172A' : '#F8FAFC' };
+  const cardBgStyle = {
+    backgroundColor: isDarkMode ? '#1E293B' : '#FFFFFF',
+    borderColor: isDarkMode ? '#334155' : '#E2E8F0',
+  };
+  const titleTextStyle = { color: isDarkMode ? '#F8FAFC' : '#0F172A' };
+  const subTextStyle = { color: isDarkMode ? '#CBD5E1' : '#64748B' };
 
-    const linkedItemCount = itemRecipes.filter((r) => String(r.inventory_id) === String(item.id)).length;
-    const linkedModCount = modRecipes.filter((r) => String(r.inventory_id) === String(item.id)).length;
+  const renderInventoryCard = ({ item }) => {
+    if (!item) return null;
+    const warnLimit = Number(item.warning_quantity ?? 5.0);
+    const currentQtyNum = Number(item.quantity) || 0;
+    const isLowStock = currentQtyNum <= warnLimit;
+
+    const linkedItemCount = (itemRecipes || []).filter((r) => r && String(r.inventory_id) === String(item.id)).length;
+    const linkedModCount = (modRecipes || []).filter((r) => r && String(r.inventory_id) === String(item.id)).length;
 
     return (
       <TouchableOpacity
-        style={styles.dataRow}
+        style={[styles.dataRow, cardBgStyle]}
         onPress={() => handleOpenQuickStock(item)}
         activeOpacity={0.8}
       >
         <View style={styles.dataRowInfo}>
           <View style={styles.nameRow}>
-            <Text style={styles.dataRowName}>{item.name}</Text>
+            <Text style={[styles.dataRowName, titleTextStyle]}>{item.name}</Text>
             {isLowStock ? (
               <View style={styles.lowStockBadge}>
                 <Text style={styles.lowStockBadgeText}>⚠️ Low Stock (≤{warnLimit})</Text>
               </View>
             ) : null}
           </View>
-          <Text style={styles.dataRowSub}>
-            Stock: <Text style={styles.qtyHighlight}>{Number(item.quantity || 0).toFixed(2)}</Text> {item.measure || 'pcs'}
+          <Text style={[styles.dataRowSub, subTextStyle]}>
+            Stock: <Text style={styles.qtyHighlight}>{currentQtyNum.toFixed(2)}</Text> {item.measure || 'pcs'}
             {' '} • Warn Level: {warnLimit.toFixed(2)} {item.measure || 'pcs'}
           </Text>
           <Text style={styles.recipeLinkSub}>
-            Linked: {linkedItemCount} Products, {linkedModCount} Flavors • <Text style={styles.tapAddStockText}>Tap to Add Stock +</Text>
+            Linked: {linkedItemCount} Products, {linkedModCount} Modifiers • <Text style={styles.tapAddStockText}>Tap to Add Stock +</Text>
           </Text>
         </View>
 
@@ -431,11 +407,7 @@ const InventoryScreen = ({ onBack, loggedInUser, rolePermissions = [] }) => {
 
   return (
     <SafeAreaView style={[styles.safeArea, bgStyle]}>
-      <KeyboardAvoidingView
-        behavior={Platform.OS === 'ios' ? 'padding' : 'height'}
-        style={styles.flexOne}
-      >
-
+      <View style={styles.flexOne}>
         {loading ? (
           <View style={styles.loadingBar}>
             <ActivityIndicator size="small" color="#2563EB" />
@@ -450,7 +422,7 @@ const InventoryScreen = ({ onBack, loggedInUser, rolePermissions = [] }) => {
         ) : null}
 
         {/* Tab Navigation: Stock Directory vs Add Inventory Item */}
-        <View style={styles.tabNavContainer}>
+        <View style={[styles.tabNavContainer, cardBgStyle]}>
           <TouchableOpacity
             style={[styles.tabBtn, activeTab === 'list' && styles.tabBtnActive]}
             onPress={() => setActiveTab('list')}
@@ -477,15 +449,15 @@ const InventoryScreen = ({ onBack, loggedInUser, rolePermissions = [] }) => {
         {/* SECTION 1: STOCK DIRECTORY LIST */}
         {activeTab === 'list' && (
           <FlatList
-            data={inventoryList}
-            keyExtractor={(item) => String(item.id)}
+            data={(inventoryList || []).filter(Boolean)}
+            keyExtractor={(item) => String(item ? item.id : Math.random())}
             renderItem={renderInventoryCard}
             contentContainerStyle={styles.scrollContent}
             ListEmptyComponent={
               <View style={styles.emptyBox}>
-                <Text style={styles.emptyTitle}>No inventory stock items created yet.</Text>
+                <Text style={[styles.emptyTitle, subTextStyle]}>No inventory stock items created yet.</Text>
                 {!isRoleCrew ? (
-                  <Text style={styles.emptySub}>Tap "➕ Add Inventory" above to create stock items.</Text>
+                  <Text style={[styles.emptySub, subTextStyle]}>Tap "➕ Add Inventory" above to create stock items.</Text>
                 ) : null}
               </View>
             }
@@ -495,17 +467,17 @@ const InventoryScreen = ({ onBack, loggedInUser, rolePermissions = [] }) => {
         {/* SECTION 2: ADD INVENTORY FORM & COMBINED ONE-PER-ROW LINKING */}
         {activeTab === 'add' && !isRoleCrew && (
           <ScrollView contentContainerStyle={styles.scrollContent} showsVerticalScrollIndicator={false}>
-            <View style={styles.cardSection}>
-              <Text style={styles.cardTitle}>Add New Inventory Stock Item</Text>
-              <Text style={styles.cardSubtitle}>
+            <View style={[styles.cardSection, cardBgStyle]}>
+              <Text style={[styles.cardTitle, titleTextStyle]}>Add New Inventory Stock Item</Text>
+              <Text style={[styles.cardSubtitle, subTextStyle]}>
                 Specify raw ingredient name, initial stock, warning quantity threshold, and linked items.
               </Text>
 
               <View style={styles.inputGroup}>
-                <Text style={styles.fieldLabel}>Inventory Item Name *:</Text>
+                <Text style={[styles.fieldLabel, subTextStyle]}>Inventory Item Name *:</Text>
                 <TextInput
-                  style={styles.textInputFull}
-                  placeholder="e.g. Chicken Raw Pieces, Rice, Honey Garlic Sauce"
+                  style={[styles.textInputFull, cardBgStyle, titleTextStyle]}
+                  placeholder="e.g. Chicken Raw Pieces, Rice, Sauce"
                   placeholderTextColor="#94A3B8"
                   value={invName}
                   onChangeText={setInvName}
@@ -514,9 +486,9 @@ const InventoryScreen = ({ onBack, loggedInUser, rolePermissions = [] }) => {
 
               <View style={styles.threeColRow}>
                 <View style={styles.colThird}>
-                  <Text style={styles.fieldLabel}>Quantity *:</Text>
+                  <Text style={[styles.fieldLabel, subTextStyle]}>Quantity *:</Text>
                   <TextInput
-                    style={styles.textInputFull}
+                    style={[styles.textInputFull, cardBgStyle, titleTextStyle]}
                     placeholder="10.5"
                     placeholderTextColor="#94A3B8"
                     keyboardType="numeric"
@@ -524,22 +496,20 @@ const InventoryScreen = ({ onBack, loggedInUser, rolePermissions = [] }) => {
                     onChangeText={setInvQuantity}
                   />
                 </View>
-
                 <View style={styles.colThird}>
-                  <Text style={styles.fieldLabel}>Unit *:</Text>
+                  <Text style={[styles.fieldLabel, subTextStyle]}>Measure Unit *:</Text>
                   <TextInput
-                    style={styles.textInputFull}
-                    placeholder="pcs, kg"
+                    style={[styles.textInputFull, cardBgStyle, titleTextStyle]}
+                    placeholder="pcs / kg / L"
                     placeholderTextColor="#94A3B8"
                     value={invMeasure}
                     onChangeText={setInvMeasure}
                   />
                 </View>
-
                 <View style={styles.colThird}>
-                  <Text style={styles.fieldLabel}>Warn Qty *:</Text>
+                  <Text style={[styles.fieldLabel, subTextStyle]}>Warning Limit *:</Text>
                   <TextInput
-                    style={styles.textInputFull}
+                    style={[styles.textInputFull, cardBgStyle, titleTextStyle]}
                     placeholder="5.0"
                     placeholderTextColor="#94A3B8"
                     keyboardType="numeric"
@@ -549,104 +519,82 @@ const InventoryScreen = ({ onBack, loggedInUser, rolePermissions = [] }) => {
                 </View>
               </View>
 
-              {/* Combined Vertical Link List (One per row) */}
-              <View style={styles.recipeBox}>
-                <Text style={styles.fieldLabel}>Link to Product Items & Modifiers (One Per Row):</Text>
+              {/* Combined Linking Section */}
+              <Text style={[styles.cardTitleSmall, titleTextStyle]}>🔗 Link Products & Modifiers to this Stock Item:</Text>
 
-                <View style={styles.verticalLinkContainer}>
-                  {combinedTargetList.length > 0 ? (
-                    combinedTargetList.map((target) => {
-                      const isLinked = target.type === 'item'
-                        ? linkedItemRecipes.some((r) => String(r.item_id) === String(target.rawId))
-                        : linkedModRecipes.some((r) => String(r.modifier_id) === String(target.rawId));
+              {combinedTargetList.map((target) => {
+                const isItem = target.type === 'item';
+                const linkedObj = isItem
+                  ? linkedItemRecipes.find((r) => String(r.item_id) === String(target.rawId))
+                  : linkedModRecipes.find((r) => String(r.modifier_id) === String(target.rawId));
+                const isChecked = !!linkedObj;
 
-                      const linkedObj = target.type === 'item'
-                        ? linkedItemRecipes.find((r) => String(r.item_id) === String(target.rawId))
-                        : linkedModRecipes.find((r) => String(r.modifier_id) === String(target.rawId));
+                return (
+                  <View key={target.id} style={[styles.linkTargetRow, isDarkMode && styles.linkTargetRowDark]}>
+                    <TouchableOpacity style={styles.linkCheckCol} onPress={() => toggleLinkTarget(target)}>
+                      <View style={[styles.checkboxBox, isChecked && styles.checkboxBoxChecked]}>
+                        {isChecked ? <Text style={styles.checkMark}>✓</Text> : null}
+                      </View>
+                      <View style={styles.targetLabelCol}>
+                        <Text style={[styles.targetNameText, titleTextStyle]}>{target.name}</Text>
+                        <Text style={[styles.targetBadgeText, isItem ? styles.badgeItem : styles.badgeMod]}>
+                          {isItem ? 'PRODUCT' : 'MODIFIER'}
+                        </Text>
+                      </View>
+                    </TouchableOpacity>
 
-                      const currentQtyVal = linkedObj ? String(linkedObj.quantity_used) : (target.type === 'item' ? '1.0' : '0.1');
-
-                      return (
-                        <View key={target.id} style={styles.linkRowItem}>
-                          <View style={styles.linkRowTextCol}>
-                            <Text style={styles.linkRowName}>
-                              {target.name}
-                              {target.type === 'modifier' ? (
-                                <Text style={styles.grayModifierText}> - modifier</Text>
-                              ) : null}
-                            </Text>
-                          </View>
-
-                          {isLinked ? (
-                            <View style={styles.linkedRowControls}>
-                              <Text style={styles.linkedQtyLabel}>Deduct:</Text>
-                              <TextInput
-                                style={styles.qtyInputMini}
-                                keyboardType="numeric"
-                                value={currentQtyVal}
-                                onChangeText={(val) => updateLinkedQty(target, val)}
-                              />
-                              <Text style={styles.measureMini}>{invMeasure || 'pcs'}</Text>
-                              <TouchableOpacity
-                                style={styles.unlinkMiniBtn}
-                                onPress={() => toggleLinkTarget(target)}
-                              >
-                                <Text style={styles.unlinkMiniBtnText}>✕ Unlink</Text>
-                              </TouchableOpacity>
-                            </View>
-                          ) : (
-                            <TouchableOpacity
-                              style={styles.linkMiniBtn}
-                              onPress={() => toggleLinkTarget(target)}
-                            >
-                              <Text style={styles.linkMiniBtnText}>+ Link</Text>
-                            </TouchableOpacity>
-                          )}
-                        </View>
-                      );
-                    })
-                  ) : (
-                    <Text style={styles.emptyBreakdownText}>No products or modifiers created yet.</Text>
-                  )}
-                </View>
-              </View>
+                    {isChecked ? (
+                      <View style={styles.qtyUsedInputCol}>
+                        <Text style={[styles.qtyUsedLabel, subTextStyle]}>Qty Used:</Text>
+                        <TextInput
+                          style={[styles.qtyUsedInput, cardBgStyle, titleTextStyle]}
+                          keyboardType="numeric"
+                          value={String(linkedObj.quantity_used || '')}
+                          onChangeText={(val) =>
+                            isItem ? handleUpdateItemQtyUsed(target.rawId, val) : handleUpdateModQtyUsed(target.rawId, val)
+                          }
+                        />
+                      </View>
+                    ) : null}
+                  </View>
+                );
+              })}
 
               <TouchableOpacity style={styles.addBtnLarge} onPress={handleAddInventory} activeOpacity={0.8}>
-                <Text style={styles.addBtnText}>+ Save Inventory Item & Links</Text>
+                <Text style={styles.addBtnText}>+ Save Inventory Item</Text>
               </TouchableOpacity>
             </View>
           </ScrollView>
         )}
 
-        {/* MODAL: QUICK STOCK ADDITION (Accepts Decimals) */}
+        {/* MODAL: QUICK STOCK ADDITION */}
         <Modal visible={!!quickStockInv} transparent animationType="fade" onRequestClose={() => setQuickStockInv(null)}>
           <TouchableWithoutFeedback onPress={Keyboard.dismiss}>
             <View style={styles.modalOverlay}>
-              <View style={styles.modalContainerLarge}>
+              <View style={styles.editModalCard}>
                 <Text style={styles.modalTitle}>Add Quantity to {quickStockInv?.name}</Text>
-                <Text style={styles.cardSubtitle}>
+                <Text style={styles.fieldLabel}>
                   Current quantity: {Number(quickStockInv?.quantity || 0).toFixed(2)} {quickStockInv?.measure || 'pcs'}
                 </Text>
 
                 <View style={styles.inputGroup}>
                   <Text style={styles.fieldLabel}>Enter Quantity to Add (Decimals accepted e.g. 0.5) *:</Text>
                   <TextInput
-                    style={styles.textInputFull}
+                    style={styles.modalTextInput}
                     placeholder="e.g. 0.5, 1, 10"
                     placeholderTextColor="#94A3B8"
                     keyboardType="numeric"
                     value={quickAddQtyInput}
                     onChangeText={setQuickAddQtyInput}
-                    autoFocus={true}
                   />
                 </View>
 
-                <View style={styles.modalActions}>
-                  <TouchableOpacity style={[styles.modalBtn, styles.btnCancel]} onPress={() => setQuickStockInv(null)}>
-                    <Text style={styles.btnCancelText}>Cancel</Text>
+                <View style={styles.modalActionsRow}>
+                  <TouchableOpacity style={styles.cancelBtn} onPress={() => setQuickStockInv(null)}>
+                    <Text style={styles.cancelBtnText}>Cancel</Text>
                   </TouchableOpacity>
-                  <TouchableOpacity style={[styles.modalBtn, styles.btnSave]} onPress={handleConfirmQuickAddStock}>
-                    <Text style={styles.btnSaveText}>Add Stock</Text>
+                  <TouchableOpacity style={styles.saveBtn} onPress={handleSaveQuickAddStock}>
+                    <Text style={styles.saveBtnText}>Add Stock</Text>
                   </TouchableOpacity>
                 </View>
               </View>
@@ -654,117 +602,79 @@ const InventoryScreen = ({ onBack, loggedInUser, rolePermissions = [] }) => {
           </TouchableWithoutFeedback>
         </Modal>
 
-        {/* MODAL: EDIT INVENTORY & COMBINED ONE-PER-ROW LINKING */}
+        {/* MODAL: EDIT INVENTORY STOCK ITEM */}
         <Modal visible={!!editingInv} transparent animationType="fade" onRequestClose={() => setEditingInv(null)}>
           <TouchableWithoutFeedback onPress={Keyboard.dismiss}>
             <View style={styles.modalOverlay}>
               <ScrollView contentContainerStyle={styles.modalScrollContainer}>
-                <View style={styles.modalContainerLarge}>
-                  <Text style={styles.modalTitle}>Edit Inventory Stock</Text>
+                <View style={styles.editModalCardLarge}>
+                  <Text style={styles.modalTitle}>Edit Inventory Item</Text>
 
                   <View style={styles.inputGroup}>
-                    <Text style={styles.fieldLabel}>Inventory Name *:</Text>
-                    <TextInput
-                      style={styles.textInputFull}
-                      value={editName}
-                      onChangeText={setEditName}
-                      placeholder="Inventory name"
-                    />
+                    <Text style={styles.fieldLabel}>Item Name *:</Text>
+                    <TextInput style={styles.modalTextInputFull} value={editName} onChangeText={setEditName} />
                   </View>
 
                   <View style={styles.threeColRow}>
                     <View style={styles.colThird}>
-                      <Text style={styles.fieldLabel}>Quantity *:</Text>
-                      <TextInput
-                        style={styles.textInputFull}
-                        keyboardType="numeric"
-                        value={editQuantity}
-                        onChangeText={setEditQuantity}
-                      />
+                      <Text style={styles.fieldLabel}>Stock *:</Text>
+                      <TextInput style={styles.modalTextInputFull} keyboardType="numeric" value={editQuantity} onChangeText={setEditQuantity} />
                     </View>
                     <View style={styles.colThird}>
                       <Text style={styles.fieldLabel}>Unit *:</Text>
-                      <TextInput
-                        style={styles.textInputFull}
-                        value={editMeasure}
-                        onChangeText={setEditMeasure}
-                      />
+                      <TextInput style={styles.modalTextInputFull} value={editMeasure} onChangeText={setEditMeasure} />
                     </View>
                     <View style={styles.colThird}>
-                      <Text style={styles.fieldLabel}>Warn Qty *:</Text>
-                      <TextInput
-                        style={styles.textInputFull}
-                        keyboardType="numeric"
-                        value={editWarningQty}
-                        onChangeText={setEditWarningQty}
-                      />
+                      <Text style={styles.fieldLabel}>Warn Limit *:</Text>
+                      <TextInput style={styles.modalTextInputFull} keyboardType="numeric" value={editWarningQty} onChangeText={setEditWarningQty} />
                     </View>
                   </View>
 
-                  {/* Combined Vertical Link List for Edit Modal */}
-                  <View style={styles.recipeBox}>
-                    <Text style={styles.fieldLabel}>Linked Product Items & Modifiers (One Per Row):</Text>
+                  <Text style={styles.cardTitleSmall}>🔗 Edit Linked Products & Modifiers:</Text>
+                  {combinedTargetList.map((target) => {
+                    const isItem = target.type === 'item';
+                    const linkedObj = isItem
+                      ? editLinkedItemRecipes.find((r) => String(r.item_id) === String(target.rawId))
+                      : editLinkedModRecipes.find((r) => String(r.modifier_id) === String(target.rawId));
+                    const isChecked = !!linkedObj;
 
-                    <View style={styles.verticalLinkContainer}>
-                      {combinedTargetList.map((target) => {
-                        const isLinked = target.type === 'item'
-                          ? editLinkedItemRecipes.some((r) => String(r.item_id) === String(target.rawId))
-                          : editLinkedModRecipes.some((r) => String(r.modifier_id) === String(target.rawId));
-
-                        const linkedObj = target.type === 'item'
-                          ? editLinkedItemRecipes.find((r) => String(r.item_id) === String(target.rawId))
-                          : editLinkedModRecipes.find((r) => String(r.modifier_id) === String(target.rawId));
-
-                        const currentQtyVal = linkedObj ? String(linkedObj.quantity_used) : (target.type === 'item' ? '1.0' : '0.1');
-
-                        return (
-                          <View key={target.id} style={styles.linkRowItem}>
-                            <View style={styles.linkRowTextCol}>
-                              <Text style={styles.linkRowName}>
-                                {target.name}
-                                {target.type === 'modifier' ? (
-                                  <Text style={styles.grayModifierText}> - modifier</Text>
-                                ) : null}
-                              </Text>
-                            </View>
-
-                            {isLinked ? (
-                              <View style={styles.linkedRowControls}>
-                                <Text style={styles.linkedQtyLabel}>Deduct:</Text>
-                                <TextInput
-                                  style={styles.qtyInputMini}
-                                  keyboardType="numeric"
-                                  value={currentQtyVal}
-                                  onChangeText={(val) => updateEditLinkedQty(target, val)}
-                                />
-                                <Text style={styles.measureMini}>{editMeasure || 'pcs'}</Text>
-                                <TouchableOpacity
-                                  style={styles.unlinkMiniBtn}
-                                  onPress={() => toggleEditLinkTarget(target)}
-                                >
-                                  <Text style={styles.unlinkMiniBtnText}>✕ Unlink</Text>
-                                </TouchableOpacity>
-                              </View>
-                            ) : (
-                              <TouchableOpacity
-                                style={styles.linkMiniBtn}
-                                onPress={() => toggleEditLinkTarget(target)}
-                              >
-                                <Text style={styles.linkMiniBtnText}>+ Link</Text>
-                              </TouchableOpacity>
-                            )}
+                    return (
+                      <View key={target.id} style={styles.linkTargetRowModal}>
+                        <TouchableOpacity style={styles.linkCheckCol} onPress={() => toggleEditLinkTarget(target)}>
+                          <View style={[styles.checkboxBox, isChecked && styles.checkboxBoxChecked]}>
+                            {isChecked ? <Text style={styles.checkMark}>✓</Text> : null}
                           </View>
-                        );
-                      })}
-                    </View>
-                  </View>
+                          <View style={styles.targetLabelCol}>
+                            <Text style={styles.targetNameTextModal}>{target.name}</Text>
+                            <Text style={[styles.targetBadgeText, isItem ? styles.badgeItem : styles.badgeMod]}>
+                              {isItem ? 'PRODUCT' : 'MODIFIER'}
+                            </Text>
+                          </View>
+                        </TouchableOpacity>
 
-                  <View style={styles.modalActions}>
-                    <TouchableOpacity style={[styles.modalBtn, styles.btnCancel]} onPress={() => setEditingInv(null)}>
-                      <Text style={styles.btnCancelText}>Cancel</Text>
+                        {isChecked ? (
+                          <View style={styles.qtyUsedInputCol}>
+                            <Text style={styles.qtyUsedLabelModal}>Qty Used:</Text>
+                            <TextInput
+                              style={styles.qtyUsedInputModal}
+                              keyboardType="numeric"
+                              value={String(linkedObj.quantity_used || '')}
+                              onChangeText={(val) =>
+                                isItem ? handleUpdateEditItemQtyUsed(target.rawId, val) : handleUpdateEditModQtyUsed(target.rawId, val)
+                              }
+                            />
+                          </View>
+                        ) : null}
+                      </View>
+                    );
+                  })}
+
+                  <View style={styles.modalActionsRow}>
+                    <TouchableOpacity style={styles.cancelBtn} onPress={() => setEditingInv(null)}>
+                      <Text style={styles.cancelBtnText}>Cancel</Text>
                     </TouchableOpacity>
-                    <TouchableOpacity style={[styles.modalBtn, styles.btnSave]} onPress={handleSaveEdit}>
-                      <Text style={styles.btnSaveText}>Save Changes</Text>
+                    <TouchableOpacity style={styles.saveBtn} onPress={handleSaveEdit}>
+                      <Text style={styles.saveBtnText}>Save</Text>
                     </TouchableOpacity>
                   </View>
                 </View>
@@ -772,7 +682,7 @@ const InventoryScreen = ({ onBack, loggedInUser, rolePermissions = [] }) => {
             </View>
           </TouchableWithoutFeedback>
         </Modal>
-      </KeyboardAvoidingView>
+      </View>
     </SafeAreaView>
   );
 };
@@ -781,49 +691,10 @@ const styles = StyleSheet.create({
   safeArea: {
     flex: 1,
     backgroundColor: '#F8FAFC',
-    paddingTop: '5%', // 5% Top Padding
+    paddingTop: 10,
   },
   flexOne: {
     flex: 1,
-  },
-  header: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    justifyContent: 'space-between',
-    paddingHorizontal: 16,
-    paddingVertical: 14,
-    borderBottomWidth: 1,
-    borderBottomColor: '#E2E8F0',
-    backgroundColor: '#FFFFFF',
-  },
-  backButton: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    paddingVertical: 4,
-    paddingRight: 10,
-  },
-  backButtonIcon: {
-    fontSize: 24,
-    fontWeight: '300',
-    color: '#2563EB',
-    marginRight: 2,
-    marginTop: -2,
-  },
-  backButtonText: {
-    fontSize: 16,
-    fontWeight: '600',
-    color: '#2563EB',
-  },
-  headerTitle: {
-    fontSize: 18,
-    fontWeight: '700',
-    color: '#0F172A',
-  },
-  refreshBtn: {
-    padding: 6,
-  },
-  refreshBtnText: {
-    fontSize: 18,
   },
   loadingBar: {
     flexDirection: 'row',
@@ -834,7 +705,7 @@ const styles = StyleSheet.create({
   },
   loadingBarText: {
     fontSize: 13,
-    color: '#1D4ED8',
+    color: '#2563EB',
     marginLeft: 8,
     fontWeight: '700',
   },
@@ -879,14 +750,14 @@ const styles = StyleSheet.create({
     color: '#FFFFFF',
   },
   scrollContent: {
-    padding: 20,
+    padding: 16,
     paddingBottom: 40,
   },
   cardSection: {
     backgroundColor: '#FFFFFF',
     borderRadius: 20,
     padding: 18,
-    marginBottom: 20,
+    marginBottom: 16,
     borderWidth: 1,
     borderColor: '#E2E8F0',
     elevation: 2,
@@ -897,10 +768,17 @@ const styles = StyleSheet.create({
     color: '#0F172A',
     marginBottom: 4,
   },
+  cardTitleSmall: {
+    fontSize: 14,
+    fontWeight: '700',
+    color: '#0F172A',
+    marginTop: 12,
+    marginBottom: 8,
+  },
   cardSubtitle: {
-    fontSize: 13,
+    fontSize: 12,
     color: '#64748B',
-    marginBottom: 16,
+    marginBottom: 14,
   },
   inputGroup: {
     marginBottom: 12,
@@ -920,14 +798,91 @@ const styles = StyleSheet.create({
     flex: 0.31,
   },
   textInputFull: {
-    height: 46,
+    height: 44,
     backgroundColor: '#F1F5F9',
     borderRadius: 12,
     paddingHorizontal: 12,
-    fontSize: 14,
+    fontSize: 13,
     color: '#0F172A',
     borderWidth: 1,
     borderColor: '#E2E8F0',
+  },
+  linkTargetRow: {
+    flexDirection: 'row',
+    justifyContent: 'space-between',
+    alignItems: 'center',
+    paddingVertical: 8,
+    borderBottomWidth: 1,
+    borderBottomColor: '#F1F5F9',
+  },
+  linkTargetRowDark: {
+    borderBottomColor: '#334155',
+  },
+  linkCheckCol: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    flex: 1,
+  },
+  checkboxBox: {
+    width: 22,
+    height: 22,
+    borderRadius: 6,
+    borderWidth: 1.5,
+    borderColor: '#94A3B8',
+    justifyContent: 'center',
+    alignItems: 'center',
+    marginRight: 10,
+  },
+  checkboxBoxChecked: {
+    backgroundColor: '#2563EB',
+    borderColor: '#2563EB',
+  },
+  checkMark: {
+    color: '#FFFFFF',
+    fontSize: 12,
+    fontWeight: '900',
+  },
+  targetLabelCol: {
+    flex: 1,
+  },
+  targetNameText: {
+    fontSize: 13,
+    fontWeight: '700',
+    color: '#0F172A',
+  },
+  targetBadgeText: {
+    fontSize: 9,
+    fontWeight: '800',
+    marginTop: 1,
+  },
+  badgeItem: {
+    color: '#2563EB',
+  },
+  badgeMod: {
+    color: '#059669',
+  },
+  qtyUsedInputCol: {
+    flexDirection: 'row',
+    alignItems: 'center',
+  },
+  qtyUsedLabel: {
+    fontSize: 11,
+    fontWeight: '600',
+    color: '#64748B',
+    marginRight: 6,
+  },
+  qtyUsedInput: {
+    width: 60,
+    height: 36,
+    backgroundColor: '#F1F5F9',
+    borderRadius: 8,
+    paddingHorizontal: 8,
+    fontSize: 12,
+    fontWeight: '700',
+    color: '#0F172A',
+    borderWidth: 1,
+    borderColor: '#CBD5E1',
+    textAlign: 'center',
   },
   addBtnLarge: {
     backgroundColor: '#2563EB',
@@ -935,114 +890,24 @@ const styles = StyleSheet.create({
     borderRadius: 12,
     justifyContent: 'center',
     alignItems: 'center',
-    marginTop: 10,
+    marginTop: 14,
   },
   addBtnText: {
     color: '#FFFFFF',
     fontSize: 14,
     fontWeight: '700',
   },
-  recipeBox: {
-    backgroundColor: '#F8FAFC',
-    borderRadius: 14,
-    padding: 12,
-    marginBottom: 12,
-    borderWidth: 1,
-    borderColor: '#E2E8F0',
-  },
-  verticalLinkContainer: {
-    marginTop: 4,
-  },
-  linkRowItem: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    justifyContent: 'space-between',
-    paddingVertical: 10,
-    paddingHorizontal: 10,
-    backgroundColor: '#FFFFFF',
-    borderRadius: 10,
-    marginBottom: 6,
-    borderWidth: 1,
-    borderColor: '#E2E8F0',
-  },
-  linkRowTextCol: {
-    flex: 1,
-    marginRight: 8,
-  },
-  linkRowName: {
-    fontSize: 13,
-    fontWeight: '700',
-    color: '#0F172A',
-  },
-  grayModifierText: {
-    fontSize: 12,
-    fontWeight: '600',
-    color: '#64748B',
-    fontStyle: 'italic',
-  },
-  linkMiniBtn: {
-    backgroundColor: '#EFF6FF',
-    paddingHorizontal: 12,
-    paddingVertical: 6,
-    borderRadius: 8,
-    borderWidth: 1,
-    borderColor: '#BFDBFE',
-  },
-  linkMiniBtnText: {
-    fontSize: 12,
-    fontWeight: '700',
-    color: '#2563EB',
-  },
-  linkedRowControls: {
-    flexDirection: 'row',
-    alignItems: 'center',
-  },
-  linkedQtyLabel: {
-    fontSize: 11,
-    fontWeight: '600',
-    color: '#475569',
-    marginRight: 4,
-  },
-  qtyInputMini: {
-    width: 58,
-    height: 38,
-    backgroundColor: '#F1F5F9',
-    borderRadius: 8,
-    paddingHorizontal: 8,
-    fontSize: 13,
-    fontWeight: '700',
-    color: '#0F172A',
-    borderWidth: 1,
-    borderColor: '#CBD5E1',
-    textAlign: 'center',
-  },
-  measureMini: {
-    fontSize: 11,
-    color: '#64748B',
-    marginHorizontal: 4,
-  },
-  unlinkMiniBtn: {
-    backgroundColor: '#FEE2E2',
-    paddingHorizontal: 8,
-    paddingVertical: 6,
-    borderRadius: 8,
-    marginLeft: 4,
-  },
-  unlinkMiniBtnText: {
-    fontSize: 11,
-    fontWeight: '700',
-    color: '#DC2626',
-  },
   dataRow: {
     backgroundColor: '#FFFFFF',
-    borderRadius: 16,
+    borderRadius: 18,
     padding: 14,
     marginBottom: 10,
     flexDirection: 'row',
-    alignItems: 'center',
     justifyContent: 'space-between',
+    alignItems: 'center',
     borderWidth: 1,
     borderColor: '#E2E8F0',
+    elevation: 2,
   },
   dataRowInfo: {
     flex: 1,
@@ -1054,40 +919,37 @@ const styles = StyleSheet.create({
   dataRowName: {
     fontSize: 15,
     fontWeight: '700',
-    color: '#1E293B',
-    marginRight: 6,
+    color: '#0F172A',
   },
   lowStockBadge: {
     backgroundColor: '#FEF3C7',
-    paddingHorizontal: 6,
+    paddingHorizontal: 8,
     paddingVertical: 2,
     borderRadius: 8,
+    marginLeft: 8,
   },
   lowStockBadgeText: {
     fontSize: 10,
-    fontWeight: '700',
-    color: '#D97706',
+    fontWeight: '800',
+    color: '#B45309',
   },
   dataRowSub: {
-    fontSize: 13,
+    fontSize: 12,
     color: '#64748B',
     marginTop: 3,
   },
+  qtyHighlight: {
+    fontWeight: '800',
+    color: '#2563EB',
+  },
   recipeLinkSub: {
     fontSize: 11,
-    color: '#2563EB',
-    fontWeight: '600',
+    color: '#64748B',
     marginTop: 2,
   },
   tapAddStockText: {
-    fontSize: 11,
-    fontWeight: '800',
     color: '#059669',
-  },
-  qtyHighlight: {
-    fontSize: 14,
-    fontWeight: '800',
-    color: '#2563EB',
+    fontWeight: '700',
   },
   actionRow: {
     flexDirection: 'row',
@@ -1096,23 +958,23 @@ const styles = StyleSheet.create({
   editBtn: {
     backgroundColor: '#F1F5F9',
     paddingHorizontal: 12,
-    paddingVertical: 7,
-    borderRadius: 10,
+    paddingVertical: 6,
+    borderRadius: 8,
     marginRight: 6,
   },
   editBtnText: {
-    fontSize: 12,
+    fontSize: 11,
     fontWeight: '600',
     color: '#2563EB',
   },
   deleteBtn: {
     backgroundColor: '#FEE2E2',
     paddingHorizontal: 12,
-    paddingVertical: 7,
-    borderRadius: 10,
+    paddingVertical: 6,
+    borderRadius: 8,
   },
   deleteBtnText: {
-    fontSize: 12,
+    fontSize: 11,
     fontWeight: '600',
     color: '#DC2626',
   },
@@ -1122,7 +984,6 @@ const styles = StyleSheet.create({
   },
   emptyTitle: {
     fontSize: 14,
-    fontWeight: '700',
     color: '#64748B',
   },
   emptySub: {
@@ -1132,62 +993,115 @@ const styles = StyleSheet.create({
   },
   modalOverlay: {
     flex: 1,
-    backgroundColor: 'rgba(15, 23, 42, 0.6)',
+    backgroundColor: 'rgba(15, 23, 42, 0.65)',
     justifyContent: 'center',
     alignItems: 'center',
     padding: 20,
   },
-  modalScrollContainer: {
-    flexGrow: 1,
-    justifyContent: 'center',
-    alignItems: 'center',
-    paddingVertical: 20,
+  editModalCard: {
+    width: '100%',
+    maxWidth: 320,
+    backgroundColor: '#FFFFFF',
+    borderRadius: 20,
+    padding: 20,
   },
-  modalContainerLarge: {
+  editModalCardLarge: {
     width: '100%',
     maxWidth: 360,
     backgroundColor: '#FFFFFF',
     borderRadius: 20,
     padding: 20,
   },
+  modalScrollContainer: {
+    flexGrow: 1,
+    justifyContent: 'center',
+    alignItems: 'center',
+  },
   modalTitle: {
-    fontSize: 18,
-    fontWeight: '700',
+    fontSize: 17,
+    fontWeight: '800',
     color: '#0F172A',
     marginBottom: 4,
   },
-  modalActions: {
+  modalTextInput: {
+    height: 44,
+    backgroundColor: '#F1F5F9',
+    borderRadius: 10,
+    paddingHorizontal: 12,
+    fontSize: 13,
+    color: '#0F172A',
+    borderWidth: 1,
+    borderColor: '#CBD5E1',
+    marginVertical: 10,
+  },
+  modalTextInputFull: {
+    height: 44,
+    backgroundColor: '#F1F5F9',
+    borderRadius: 10,
+    paddingHorizontal: 12,
+    fontSize: 13,
+    color: '#0F172A',
+    borderWidth: 1,
+    borderColor: '#CBD5E1',
+  },
+  linkTargetRowModal: {
+    flexDirection: 'row',
+    justifyContent: 'space-between',
+    alignItems: 'center',
+    paddingVertical: 6,
+    borderBottomWidth: 1,
+    borderBottomColor: '#F1F5F9',
+  },
+  targetNameTextModal: {
+    fontSize: 12,
+    fontWeight: '700',
+    color: '#0F172A',
+  },
+  qtyUsedLabelModal: {
+    fontSize: 10,
+    color: '#64748B',
+    marginRight: 4,
+  },
+  qtyUsedInputModal: {
+    width: 50,
+    height: 32,
+    backgroundColor: '#F1F5F9',
+    borderRadius: 6,
+    paddingHorizontal: 6,
+    fontSize: 11,
+    fontWeight: '700',
+    color: '#0F172A',
+    borderWidth: 1,
+    borderColor: '#CBD5E1',
+    textAlign: 'center',
+  },
+  modalActionsRow: {
     flexDirection: 'row',
     justifyContent: 'flex-end',
-    marginTop: 16,
+    marginTop: 14,
   },
-  modalBtn: {
-    paddingVertical: 10,
-    paddingHorizontal: 16,
-    borderRadius: 10,
-    marginLeft: 8,
-  },
-  btnCancel: {
+  cancelBtn: {
+    paddingVertical: 8,
+    paddingHorizontal: 14,
+    borderRadius: 8,
     backgroundColor: '#F1F5F9',
+    marginRight: 6,
   },
-  btnCancelText: {
-    fontSize: 14,
+  cancelBtnText: {
+    fontSize: 13,
     fontWeight: '600',
     color: '#64748B',
   },
-  btnSave: {
+  saveBtn: {
+    paddingVertical: 8,
+    paddingHorizontal: 16,
+    borderRadius: 8,
     backgroundColor: '#2563EB',
   },
-  btnSaveText: {
-    fontSize: 14,
+  saveBtnText: {
+    fontSize: 13,
     fontWeight: '700',
     color: '#FFFFFF',
-  },
-  emptyBreakdownText: {
-    fontSize: 12,
-    color: '#94A3B8',
-    textAlign: 'center',
-    paddingVertical: 10,
   },
 });
 

@@ -21,12 +21,12 @@ const ThermalPrintModal = ({
   visible,
   onClose,
   order,
-  storeName = 'People Log',
+  storeName = 'SetSales',
   isTaxEnabled = true,
   taxRate = 5,
-  initialType = 'receipt', // 'order' | 'receipt' | 'both'
+  initialType = 'order', // Order Slip FIRST by default
 }) => {
-  const [printType, setPrintType] = useState(initialType);
+  const [printType, setPrintType] = useState(initialType || 'order');
   const [isPrinting, setIsPrinting] = useState(false);
 
   if (!order) return null;
@@ -51,10 +51,10 @@ const ThermalPrintModal = ({
 
     setIsPrinting(true);
     try {
-      if (printType === 'receipt') {
-        await printReceiptViaPrinter(order, storeName, isTaxEnabled, taxRate);
-      } else if (printType === 'order') {
+      if (printType === 'order') {
         await printOrderSlipViaPrinter(order);
+      } else if (printType === 'receipt') {
+        await printReceiptViaPrinter(order, storeName, isTaxEnabled, taxRate);
       } else {
         await printOrderSlipViaPrinter(order);
         await printReceiptViaPrinter(order, storeName, isTaxEnabled, taxRate);
@@ -215,23 +215,23 @@ const ThermalPrintModal = ({
                 </Text>
               </View>
 
-              {/* Selector Tabs for Print Type */}
+              {/* Selector Tabs for Print Type (Order Slip FIRST!) */}
               <View style={styles.tabRow}>
-                <TouchableOpacity
-                  style={[styles.typeTabBtn, printType === 'receipt' && styles.typeTabBtnActive]}
-                  onPress={() => setPrintType('receipt')}
-                >
-                  <Text style={[styles.typeTabText, printType === 'receipt' && styles.typeTabTextActive]}>
-                    Receipt
-                  </Text>
-                </TouchableOpacity>
-
                 <TouchableOpacity
                   style={[styles.typeTabBtn, printType === 'order' && styles.typeTabBtnActive]}
                   onPress={() => setPrintType('order')}
                 >
                   <Text style={[styles.typeTabText, printType === 'order' && styles.typeTabTextActive]}>
                     Order Slip
+                  </Text>
+                </TouchableOpacity>
+
+                <TouchableOpacity
+                  style={[styles.typeTabBtn, printType === 'receipt' && styles.typeTabBtnActive]}
+                  onPress={() => setPrintType('receipt')}
+                >
+                  <Text style={[styles.typeTabText, printType === 'receipt' && styles.typeTabTextActive]}>
+                    Receipt
                   </Text>
                 </TouchableOpacity>
 
@@ -260,7 +260,7 @@ const ThermalPrintModal = ({
                 )}
               </ScrollView>
 
-              {/* Actions with disabled Print button if no printer is connected */}
+              {/* Actions */}
               <View style={styles.modalActions}>
                 <TouchableOpacity style={styles.cancelBtnLarge} onPress={onClose}>
                   <Text style={styles.cancelBtnText}>Close</Text>

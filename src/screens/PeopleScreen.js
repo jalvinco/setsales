@@ -19,7 +19,16 @@ import PersonDetailModal from '../components/PersonDetailModal';
 import PinModal from '../components/PinModal';
 import UserLogsModal from '../components/UserLogsModal';
 import { DEFAULT_THEME } from '../utils/themeUtils';
-import { fetchRolePermissions, updateRolePermissions } from '../services/supabase';
+import { fetchRolePermissions, updateRolePermissions, updateUser } from '../services/supabase';
+
+const PRESET_LIGHT_COLORS = [
+  { name: 'Light Green', hex: '#DCFCE7' },
+  { name: 'Light Blue', hex: '#DBEAFE' },
+  { name: 'Light Yellow', hex: '#FEF3C7' },
+  { name: 'Light Red', hex: '#FEE2E2' },
+  { name: 'Light Grey', hex: '#F1F5F9' },
+  { name: 'Light Orange', hex: '#FFEDD5' },
+];
 
 const PeopleScreen = ({
   people = [],
@@ -54,6 +63,7 @@ const PeopleScreen = ({
   const [newRate, setNewRate] = useState('100');
   const [newHalfRate, setNewHalfRate] = useState('50');
   const [newExtraRate, setNewExtraRate] = useState('0');
+  const [newColor, setNewColor] = useState(null);
   const [addError, setAddError] = useState('');
 
   // Editing Person State
@@ -63,6 +73,7 @@ const PeopleScreen = ({
   const [editRate, setEditRate] = useState('0');
   const [editHalfRate, setEditHalfRate] = useState('0');
   const [editExtraRate, setEditExtraRate] = useState('0');
+  const [editColor, setEditColor] = useState(null);
   const [editError, setEditError] = useState('');
 
   // Role Permissions State
@@ -197,9 +208,10 @@ const PeopleScreen = ({
     }
 
     if (onAddPerson) {
-      onAddPerson(trimmed, selectedRole, newRate, newHalfRate, newExtraRate);
+      onAddPerson(trimmed, selectedRole, newRate, newHalfRate, newExtraRate, newColor);
     }
     setNewName('');
+    setNewColor(null);
     setAddError('');
     Keyboard.dismiss();
     triggerToast(`${trimmed} added (Default PIN is 000000).`);
@@ -212,6 +224,7 @@ const PeopleScreen = ({
     setEditRate(String(person.rate || 0));
     setEditHalfRate(String(person.half_rate || 0));
     setEditExtraRate(String(person.extra_rate || 0));
+    setEditColor(person.color || null);
     setEditError('');
   };
 
@@ -224,10 +237,32 @@ const PeopleScreen = ({
     }
 
     if (onEditPerson) {
-      onEditPerson(editingPerson.id, trimmed, editRole, editRate, editHalfRate, editExtraRate);
+      onEditPerson(editingPerson.id, trimmed, editRole, editRate, editHalfRate, editExtraRate, editColor);
     }
     setEditingPerson(null);
     triggerToast(`Updated ${trimmed}.`);
+  };
+
+  const handleResetUserPinConfirm = (person) => {
+    Alert.alert(
+      'Reset 6-Digit PIN',
+      `Reset PIN for "${person.name}" back to default (000000)?`,
+      [
+        { text: 'Cancel', style: 'cancel' },
+        {
+          text: 'Reset PIN',
+          style: 'destructive',
+          onPress: async () => {
+            try {
+              await updateUser(person.id, { pin: '000000' });
+              triggerToast(`PIN reset to 000000 for ${person.name}`);
+            } catch (e) {
+              Alert.alert('Error', e.message);
+            }
+          },
+        },
+      ]
+    );
   };
 
   const handleDeletePersonConfirm = (person) => {
@@ -261,6 +296,7 @@ const PeopleScreen = ({
 
   const renderPersonItem = ({ item }) => {
     const isLoggedIn = item.status === 'Logged In';
+    const avatarBg = item.color || (isLoggedIn ? '#D1FAE5' : '#F1F5F9');
 
     return (
       <TouchableOpacity
@@ -272,7 +308,7 @@ const PeopleScreen = ({
           <View
             style={[
               styles.avatarCircle,
-              isLoggedIn ? styles.avatarCircleIn : styles.avatarCircleOut,
+              { backgroundColor: avatarBg },
             ]}
           >
             <Text
@@ -572,6 +608,36 @@ const PeopleScreen = ({
                       </View>
                     </View>
 
+                    {/* Color Swatch Selector for User Avatar */}
+                    <View style={styles.colorPickerBlock}>
+                      <Text style={styles.fieldLabel}>Avatar Circle Color (Optional):</Text>
+                      <ScrollView horizontal showsHorizontalScrollIndicator={false} style={styles.swatchRow}>
+                        <TouchableOpacity
+                          style={[styles.swatchCircle, !newColor && styles.swatchActive, { backgroundColor: '#FFFFFF' }]}
+                          onPress={() => setNewColor(null)}
+                        >
+                          <Text style={styles.clearSwatchText}>✕</Text>
+                        </TouchableOpacity>
+
+                        {PRESET_LIGHT_COLORS.map((item) => (
+                          <TouchableOpacity
+                            key={item.hex}
+                            style={[styles.swatchCircle, { backgroundColor: item.hex }, newColor === item.hex && styles.swatchActive]}
+                            onPress={() => setNewColor(item.hex)}
+                          />
+                        ))}
+                      </ScrollView>
+
+                      <TextInput
+                        style={styles.colorHexInputSmall}
+                        placeholder="e.g. #DCFCE7 or leave empty for default"
+                        placeholderTextColor="#94A3B8"
+                        value={newColor || ''}
+                        onChangeText={setNewColor}
+                        autoCapitalize="characters"
+                      />
+                    </View>
+
                     {addError ? <Text style={styles.errorText}>{addError}</Text> : null}
 
                     <TouchableOpacity style={styles.addBtnLarge} onPress={handleAddPersonAction}>
@@ -591,6 +657,11 @@ const PeopleScreen = ({
                       </View>
 
                       <View style={styles.actionRow}>
+                        {isAdminUser ? (
+                          <TouchableOpacity style={styles.resetPinBtn} onPress={() => handleResetUserPinConfirm(p)}>
+                            <Text style={styles.resetPinBtnText}>🔑 Reset PIN</Text>
+                          </TouchableOpacity>
+                        ) : null}
                         <TouchableOpacity style={styles.editBtn} onPress={() => handleOpenEditPerson(p)}>
                           <Text style={styles.editBtnText}>Edit</Text>
                         </TouchableOpacity>
@@ -652,7 +723,7 @@ const PeopleScreen = ({
         </View>
       </Modal>
 
-      {/* MODAL: EDIT PERSON DETAILS WITH ROLE SELECTOR */}
+      {/* MODAL: EDIT PERSON DETAILS WITH COLOR PICKER */}
       <Modal visible={!!editingPerson} transparent animationType="fade" onRequestClose={() => setEditingPerson(null)}>
         <TouchableWithoutFeedback onPress={Keyboard.dismiss}>
           <View style={styles.modalOverlay}>
@@ -731,6 +802,36 @@ const PeopleScreen = ({
                     onChangeText={setEditExtraRate}
                   />
                 </View>
+              </View>
+
+              {/* Color Swatch Selector for Editing User Avatar */}
+              <View style={styles.colorPickerBlock}>
+                <Text style={styles.fieldLabel}>Avatar Circle Color:</Text>
+                <ScrollView horizontal showsHorizontalScrollIndicator={false} style={styles.swatchRow}>
+                  <TouchableOpacity
+                    style={[styles.swatchCircle, !editColor && styles.swatchActive, { backgroundColor: '#FFFFFF' }]}
+                    onPress={() => setEditColor(null)}
+                  >
+                    <Text style={styles.clearSwatchText}>✕</Text>
+                  </TouchableOpacity>
+
+                  {PRESET_LIGHT_COLORS.map((item) => (
+                    <TouchableOpacity
+                      key={item.hex}
+                      style={[styles.swatchCircle, { backgroundColor: item.hex }, editColor === item.hex && styles.swatchActive]}
+                      onPress={() => setEditColor(item.hex)}
+                    />
+                  ))}
+                </ScrollView>
+
+                <TextInput
+                  style={styles.colorHexInputSmall}
+                  placeholder="e.g. #DCFCE7 or leave empty"
+                  placeholderTextColor="#94A3B8"
+                  value={editColor || ''}
+                  onChangeText={setEditColor}
+                  autoCapitalize="characters"
+                />
               </View>
 
               {editError ? <Text style={styles.errorText}>{editError}</Text> : null}
@@ -942,12 +1043,6 @@ const styles = StyleSheet.create({
     justifyContent: 'center',
     alignItems: 'center',
     marginRight: 12,
-  },
-  avatarCircleIn: {
-    backgroundColor: '#D1FAE5',
-  },
-  avatarCircleOut: {
-    backgroundColor: '#F1F5F9',
   },
   avatarText: {
     fontSize: 17,
@@ -1189,6 +1284,44 @@ const styles = StyleSheet.create({
     borderWidth: 1,
     borderColor: '#E2E8F0',
   },
+  colorPickerBlock: {
+    marginTop: 8,
+    marginBottom: 10,
+  },
+  swatchRow: {
+    flexDirection: 'row',
+    paddingVertical: 4,
+  },
+  swatchCircle: {
+    width: 30,
+    height: 30,
+    borderRadius: 15,
+    marginRight: 8,
+    borderWidth: 1.5,
+    borderColor: '#CBD5E1',
+    justifyContent: 'center',
+    alignItems: 'center',
+  },
+  swatchActive: {
+    borderWidth: 3,
+    borderColor: '#2563EB',
+  },
+  clearSwatchText: {
+    fontSize: 12,
+    color: '#64748B',
+    fontWeight: '800',
+  },
+  colorHexInputSmall: {
+    height: 36,
+    backgroundColor: '#FFFFFF',
+    borderRadius: 8,
+    paddingHorizontal: 10,
+    fontSize: 12,
+    color: '#0F172A',
+    borderWidth: 1,
+    borderColor: '#E2E8F0',
+    marginTop: 6,
+  },
   addBtnLarge: {
     backgroundColor: '#2563EB',
     height: 44,
@@ -1232,6 +1365,20 @@ const styles = StyleSheet.create({
   actionRow: {
     flexDirection: 'row',
     alignItems: 'center',
+  },
+  resetPinBtn: {
+    backgroundColor: '#FEF3C7',
+    paddingHorizontal: 8,
+    paddingVertical: 6,
+    borderRadius: 8,
+    marginRight: 4,
+    borderWidth: 1,
+    borderColor: '#FDE68A',
+  },
+  resetPinBtnText: {
+    fontSize: 11,
+    fontWeight: '700',
+    color: '#B45309',
   },
   editBtn: {
     backgroundColor: '#F1F5F9',

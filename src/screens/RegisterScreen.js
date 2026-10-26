@@ -51,7 +51,7 @@ const RegisterScreen = ({
   const [activeModGroups, setActiveModGroups] = useState([]);
   const [selectedModifiersState, setSelectedModifiersState] = useState([]);
 
-  // Discount Modal State
+  // Order Discount Modal State
   const [isDiscountModalVisible, setIsDiscountModalVisible] = useState(false);
   const [discountType, setDiscountType] = useState('percent'); // 'percent' | 'fixed'
   const [discountValue, setDiscountValue] = useState('');
@@ -93,7 +93,11 @@ const RegisterScreen = ({
       setCategoriesData(activeCats);
       setCategories(['All', ...activeCats.map((c) => (c && c.name ? c.name : 'Category'))]);
 
-      setProducts(Array.isArray(itms) ? itms : []);
+      const sortedItems = Array.isArray(itms)
+        ? [...itms].sort((a, b) => (Number(b.price) || 0) - (Number(a.price) || 0))
+        : [];
+
+      setProducts(sortedItems);
       setModifierGroups(Array.isArray(mGroups) ? mGroups : []);
       setModifiers(Array.isArray(mods) ? mods : []);
       setItemModifierGroups(Array.isArray(imGroups) ? imGroups : []);
@@ -111,12 +115,14 @@ const RegisterScreen = ({
     }
   };
 
-  const filteredProducts = (products || []).filter((p) => {
-    if (!p) return false;
-    if (selectedCategory === 'All') return true;
-    const catObj = (categoriesData || []).find((c) => c && c.name === selectedCategory);
-    return catObj && String(p.category_id) === String(catObj.id);
-  });
+  const filteredProducts = (products || [])
+    .filter((p) => {
+      if (!p) return false;
+      if (selectedCategory === 'All') return true;
+      const catObj = (categoriesData || []).find((c) => c && c.name === selectedCategory);
+      return catObj && String(p.category_id) === String(catObj.id);
+    })
+    .sort((a, b) => (Number(b.price) || 0) - (Number(a.price) || 0));
 
   const handleProductClick = (product) => {
     if (!product) return;
@@ -245,6 +251,33 @@ const RegisterScreen = ({
     setLineDiscountQty(String(item.quantity || 1));
   };
 
+  const handleSaveLineDiscount = () => {
+    if (!editingCartItem) return;
+    const val = Number(lineDiscountValue) || 0;
+    const qtyToApply = Math.min(editingCartItem.quantity, Math.max(1, Number(lineDiscountQty) || 1));
+
+    let discPerUnit = 0;
+    if (lineDiscountType === 'percent') {
+      discPerUnit = (editingCartItem.price * (val / 100));
+    } else {
+      discPerUnit = val;
+    }
+
+    setCart((prev) =>
+      (prev || []).map((c) =>
+        c && c.cartKey === editingCartItem.cartKey
+          ? {
+              ...c,
+              discountAmountPerUnit: discPerUnit,
+              discountQty: qtyToApply,
+            }
+          : c
+      )
+    );
+
+    setEditingCartItem(null);
+  };
+
   const calculateSubtotal = () => {
     return (cart || []).reduce((sum, item) => {
       return sum + (Number(item?.price) || 0) * (Number(item?.quantity) || 1);
@@ -272,6 +305,39 @@ const RegisterScreen = ({
   const totalOrderCost = (cart || []).reduce((sum, item) => {
     return sum + (Number(item?.unitCost) || 0) * (Number(item?.quantity) || 1);
   }, 0);
+
+  const handleApplyOrderDiscount = () => {
+    const val = Number(discountValue) || 0;
+    if (val < 0) {
+      Alert.alert('Invalid Discount', 'Please enter a valid discount value.');
+      return;
+    }
+
+    let calculatedDisc = 0;
+    if (discountType === 'percent') {
+      calculatedDisc = subtotalAfterLineDiscounts * (val / 100);
+    } else {
+      calculatedDisc = val;
+    }
+
+    setOrderDiscountVal(calculatedDisc);
+    setIsDiscountModalVisible(false);
+  };
+
+  // Additive Cash Tendered Shortcut (e.g. 100 + 100 = 200)
+  const handleAddTenderedCash = (addVal) => {
+    setTenderedAmount((prev) => (Number(prev) || 0) + addVal);
+  };
+
+  // Additive Line Discount Shortcut
+  const handleAddLineDiscountVal = (addVal) => {
+    setLineDiscountValue((prev) => String((Number(prev) || 0) + addVal));
+  };
+
+  // Additive Order Discount Shortcut
+  const handleAddOrderDiscountVal = (addVal) => {
+    setDiscountValue((prev) => String((Number(prev) || 0) + addVal));
+  };
 
   const handleCompleteCheckout = async () => {
     const isCashMethod = String(activeMethodName || 'cash').toLowerCase() === 'cash';
@@ -349,6 +415,14 @@ const RegisterScreen = ({
       setCheckoutLoading(false);
     }
   };
+
+  // Live item total calculation for Product Modifier Modal
+  const modBasePrice = Number(selectedProductForMod?.price || 0);
+  const modExtraSum = (selectedModifiersState || []).reduce(
+    (sum, m) => sum + (Number(m?.extra_price) || 0),
+    0
+  );
+  const modalItemTotalPrice = modBasePrice + modExtraSum;
 
   const bgStyle = { backgroundColor: isDarkMode ? '#0F172A' : '#F8FAFC' };
   const cardBgStyle = {
@@ -449,14 +523,18 @@ const RegisterScreen = ({
                     ) : null}
 
                     <View style={styles.cartItemBottomRow}>
-                      <View>
+                      <View style={styles.cartPriceCol}>
                         <Text style={styles.cartUnitPrice}>₱{item.price.toFixed(2)} each</Text>
                         {lineDiscTotal > 0 ? (
                           <Text style={styles.lineDiscBadgeText}>
                             Disc: -₱{lineDiscTotal.toFixed(2)} ({activeDiscUnits} units)
                           </Text>
                         ) : null}
-                        <TouchableOpacity onPress={() => handleOpenLineDiscount(item)}>
+                        <TouchableOpacity
+                          onPress={() => handleOpenLineDiscount(item)}
+                          hitSlop={{ top: 12, bottom: 12, left: 12, right: 12 }}
+                          style={styles.lineDiscTouchBtn}
+                        >
                           <Text style={styles.itemDiscountBtnText}>✏️ Apply Discount</Text>
                         </TouchableOpacity>
                       </View>
@@ -514,6 +592,7 @@ const RegisterScreen = ({
               <TouchableOpacity
                 style={styles.orderDiscountBtn}
                 onPress={() => setIsDiscountModalVisible(true)}
+                activeOpacity={0.8}
               >
                 <Text style={styles.orderDiscountBtnText}>
                   🏷️ {orderDiscountVal > 0 ? `Order Disc: -₱${orderDiscountVal.toFixed(2)}` : 'Add Order Discount'}
@@ -537,159 +616,374 @@ const RegisterScreen = ({
           </View>
         </View>
 
-        {/* MODAL: PRODUCT MODIFIER SELECTION */}
+        {/* MODAL 1: PRODUCT MODIFIER SELECTION (With Live Item Total Price Preview) */}
         <Modal visible={!!selectedProductForMod} transparent animationType="slide" onRequestClose={() => setSelectedProductForMod(null)}>
-          <TouchableWithoutFeedback onPress={() => setSelectedProductForMod(null)}>
-            <View style={styles.modalOverlay}>
-              <TouchableWithoutFeedback>
-                <View style={styles.checkoutModalCardLarge}>
-                  <Text style={styles.modalTitle}>{selectedProductForMod?.name}</Text>
-                  <Text style={styles.fieldLabel}>Customize Options & Modifiers:</Text>
-
-                  <ScrollView style={styles.modGroupScroll} showsVerticalScrollIndicator={true}>
-                    {activeModGroups.map((group) => {
-                      const groupMods = (modifiers || []).filter(
-                        (m) => m && String(m.group_id) === String(group.id) && m.is_available !== false
-                      );
-                      const minReq = Number(group.min_selection || 0);
-                      const maxAllowed = Number(group.max_selection || 1);
-
-                      return (
-                        <View key={group.id} style={styles.modGroupSectionCard}>
-                          <View style={styles.modGroupHeaderRow}>
-                            <Text style={styles.modGroupTitleText}>{group.name}</Text>
-                            <View style={styles.ruleBadgeBox}>
-                              <Text style={styles.ruleBadgeText}>
-                                {maxAllowed === 1 ? 'Choose 1' : `Choose up to ${maxAllowed}`}
-                                {minReq > 0 ? ' (Required)' : ''}
-                              </Text>
-                            </View>
-                          </View>
-
-                          <View style={styles.modOptionsRow}>
-                            {groupMods.map((mod) => {
-                              const isSelected = selectedModifiersState.some((m) => String(m.id) === String(mod.id));
-                              return (
-                                <TouchableOpacity
-                                  key={mod.id}
-                                  style={[styles.modChip, isSelected && styles.modChipActive]}
-                                  onPress={() => handleSelectModifierChoice(group, mod)}
-                                  activeOpacity={0.8}
-                                >
-                                  <Text style={[styles.modChipText, isSelected && styles.modChipTextActive]}>
-                                    {isSelected ? '✓ ' : ''}{mod.name} {Number(mod.extra_price) > 0 ? `(+₱${Number(mod.extra_price).toFixed(2)})` : ''}
-                                  </Text>
-                                </TouchableOpacity>
-                              );
-                            })}
-                          </View>
-                        </View>
-                      );
-                    })}
-                  </ScrollView>
-
-                  <View style={styles.modalActions}>
-                    <TouchableOpacity style={styles.cancelModalBtn} onPress={() => setSelectedProductForMod(null)}>
-                      <Text style={styles.cancelModalBtnText}>Cancel</Text>
-                    </TouchableOpacity>
-
-                    <TouchableOpacity style={styles.confirmCheckoutBtn} onPress={handleConfirmModifiers}>
-                      <Text style={styles.confirmCheckoutBtnText}>+ Add to Order</Text>
-                    </TouchableOpacity>
-                  </View>
-                </View>
-              </TouchableWithoutFeedback>
-            </View>
-          </TouchableWithoutFeedback>
-        </Modal>
-
-        {/* MODAL: CHECKOUT & TENDERED AMOUNT NUMPAD */}
-        <Modal visible={isCheckoutModalVisible} transparent animationType="slide">
-          <TouchableWithoutFeedback onPress={Keyboard.dismiss}>
-            <View style={styles.modalOverlay}>
-              <View style={styles.checkoutModalCard}>
-                <Text style={styles.modalTitle}>Checkout Order (₱{grandTotal.toFixed(2)})</Text>
-
-                {/* Payment Method Selector Tabs */}
-                <View style={styles.methodTabRow}>
-                  {(paymentMethods || []).map((pm) => {
-                    if (!pm) return null;
-                    const isActive = String(activeMethodName || '').toLowerCase() === String(pm.name || '').toLowerCase();
-                    return (
-                      <TouchableOpacity
-                        key={pm.id}
-                        style={[styles.methodTabBtn, isActive && styles.methodTabBtnActive]}
-                        onPress={() => {
-                          setActiveMethodName(pm.name || 'Cash');
-                          setSelectedPayMethodObj(pm);
-                        }}
-                      >
-                        <Text style={[styles.methodTabText, isActive && styles.methodTabTextActive]}>
-                          {pm.name || 'Cash'}
-                        </Text>
-                      </TouchableOpacity>
-                    );
-                  })}
-                </View>
-
-                {String(activeMethodName || '').toLowerCase() === 'cash' ? (
-                  <View style={styles.cashTenderedSection}>
-                    <Text style={styles.fieldLabel}>Cash Tendered Amount (₱) *:</Text>
-
-                    <TextInput
-                      style={styles.tenderedInputFull}
-                      placeholder="0.00"
-                      placeholderTextColor="#94A3B8"
-                      keyboardType="numeric"
-                      value={tenderedAmount ? String(tenderedAmount) : ''}
-                      onChangeText={(val) => setTenderedAmount(Number(val) || 0)}
-                    />
-
-                    {/* Quick Numpad Shortcuts */}
-                    <View style={styles.numpadGrid}>
-                      {[100, 200, 500, 1000].map((amt) => (
-                        <TouchableOpacity
-                          key={amt}
-                          style={styles.numpadBtn}
-                          onPress={() => setTenderedAmount(amt)}
-                        >
-                          <Text style={styles.numpadBtnText}>₱{amt}</Text>
-                        </TouchableOpacity>
-                      ))}
-                    </View>
-
-                    <View style={styles.changeDueRow}>
-                      <Text style={styles.changeDueLabel}>Change Due:</Text>
-                      <Text style={styles.changeDueVal}>
-                        ₱{Math.max(0, (Number(tenderedAmount) || 0) - grandTotal).toFixed(2)}
-                      </Text>
-                    </View>
-                  </View>
-                ) : null}
-
-                <View style={styles.modalActions}>
-                  <TouchableOpacity
-                    style={styles.cancelModalBtn}
-                    onPress={() => setIsCheckoutModalVisible(false)}
-                  >
-                    <Text style={styles.cancelModalBtnText}>Cancel</Text>
-                  </TouchableOpacity>
-
-                  <TouchableOpacity
-                    style={styles.confirmCheckoutBtn}
-                    onPress={handleCompleteCheckout}
-                    disabled={checkoutLoading}
-                  >
-                    {checkoutLoading ? (
-                      <ActivityIndicator color="#FFFFFF" size="small" />
-                    ) : (
-                      <Text style={styles.confirmCheckoutBtnText}>Complete Payment</Text>
-                    )}
-                  </TouchableOpacity>
+          <View style={styles.modalOverlay}>
+            <View style={styles.checkoutModalCardLarge}>
+              <View style={styles.modalHeaderPriceRow}>
+                <Text style={styles.modalTitle}>{selectedProductForMod?.name}</Text>
+                <View style={styles.pricePreviewBadgeBox}>
+                  <Text style={styles.pricePreviewBadgeText}>
+                    Item Total: ₱{modalItemTotalPrice.toFixed(2)}
+                  </Text>
                 </View>
               </View>
+
+              <Text style={styles.fieldLabel}>Customize Options & Modifiers:</Text>
+
+              <ScrollView style={styles.modGroupScroll} showsVerticalScrollIndicator={true}>
+                {activeModGroups.map((group) => {
+                  const groupMods = (modifiers || []).filter(
+                    (m) => m && String(m.group_id) === String(group.id) && m.is_available !== false
+                  );
+                  const minReq = Number(group.min_selection || 0);
+                  const maxAllowed = Number(group.max_selection || 1);
+
+                  return (
+                    <View key={group.id} style={styles.modGroupSectionCard}>
+                      <View style={styles.modGroupHeaderRow}>
+                        <Text style={styles.modGroupTitleText}>{group.name}</Text>
+                        <View style={styles.ruleBadgeBox}>
+                          <Text style={styles.ruleBadgeText}>
+                            {maxAllowed === 1 ? 'Choose 1' : `Choose up to ${maxAllowed}`}
+                            {minReq > 0 ? ' (Required)' : ''}
+                          </Text>
+                        </View>
+                      </View>
+
+                      <View style={styles.modOptionsRow}>
+                        {groupMods.map((mod) => {
+                          const isSelected = selectedModifiersState.some((m) => String(m.id) === String(mod.id));
+                          const customChipBg = isSelected ? '#2563EB' : mod.color || '#FFFFFF';
+
+                          return (
+                            <TouchableOpacity
+                              key={mod.id}
+                              style={[
+                                styles.modChip,
+                                { backgroundColor: customChipBg },
+                                isSelected && styles.modChipActiveBorder,
+                              ]}
+                              onPress={() => handleSelectModifierChoice(group, mod)}
+                              activeOpacity={0.8}
+                            >
+                              <Text style={[styles.modChipText, isSelected && styles.modChipTextActive]}>
+                                {isSelected ? '✓ ' : ''}{mod.name} {Number(mod.extra_price) > 0 ? `(+₱${Number(mod.extra_price).toFixed(2)})` : ''}
+                              </Text>
+                            </TouchableOpacity>
+                          );
+                        })}
+                      </View>
+                    </View>
+                  );
+                })}
+              </ScrollView>
+
+              <View style={styles.modalActions}>
+                <TouchableOpacity style={styles.cancelModalBtn} onPress={() => setSelectedProductForMod(null)}>
+                  <Text style={styles.cancelModalBtnText}>Cancel</Text>
+                </TouchableOpacity>
+
+                <TouchableOpacity style={styles.confirmCheckoutBtn} onPress={handleConfirmModifiers}>
+                  <Text style={styles.confirmCheckoutBtnText}>
+                    + Add to Order (₱{modalItemTotalPrice.toFixed(2)})
+                  </Text>
+                </TouchableOpacity>
+              </View>
             </View>
-          </TouchableWithoutFeedback>
+          </View>
+        </Modal>
+
+        {/* MODAL 2: ITEM LINE DISCOUNT (With Additive Shortcuts) */}
+        <Modal visible={!!editingCartItem} transparent animationType="fade" onRequestClose={() => setEditingCartItem(null)}>
+          <View style={styles.modalOverlay}>
+            <View style={styles.checkoutModalCard}>
+              <Text style={styles.modalTitle}>Item Discount: {editingCartItem?.name}</Text>
+              <Text style={styles.fieldLabel}>Original Price: ₱{Number(editingCartItem?.price || 0).toFixed(2)} each</Text>
+
+              <View style={styles.methodTabRow}>
+                <TouchableOpacity
+                  style={[styles.methodTabBtn, lineDiscountType === 'percent' && styles.methodTabBtnActive]}
+                  onPress={() => setLineDiscountType('percent')}
+                >
+                  <Text style={[styles.methodTabText, lineDiscountType === 'percent' && styles.methodTabTextActive]}>
+                    Percentage (%)
+                  </Text>
+                </TouchableOpacity>
+
+                <TouchableOpacity
+                  style={[styles.methodTabBtn, lineDiscountType === 'fixed' && styles.methodTabBtnActive]}
+                  onPress={() => setLineDiscountType('fixed')}
+                >
+                  <Text style={[styles.methodTabText, lineDiscountType === 'fixed' && styles.methodTabTextActive]}>
+                    Fixed Amount (₱)
+                  </Text>
+                </TouchableOpacity>
+              </View>
+
+              <View style={styles.inputGroup}>
+                <Text style={styles.fieldLabel}>Discount Value ({lineDiscountType === 'percent' ? '%' : '₱'}) *:</Text>
+                <TextInput
+                  style={styles.textInputFullModal}
+                  placeholder={lineDiscountType === 'percent' ? '0%' : '₱0.00'}
+                  placeholderTextColor="#94A3B8"
+                  keyboardType="numeric"
+                  value={lineDiscountValue}
+                  onChangeText={setLineDiscountValue}
+                />
+              </View>
+
+              {/* Additive Shortcut Buttons for Line Discount */}
+              <Text style={styles.fieldLabelMini}>Tap Shortcut to Add on Top:</Text>
+              <View style={styles.numpadGrid}>
+                {lineDiscountType === 'percent'
+                  ? [5, 10, 20].map((pct) => (
+                      <TouchableOpacity
+                        key={pct}
+                        style={styles.numpadBtn}
+                        onPress={() => handleAddLineDiscountVal(pct)}
+                      >
+                        <Text style={styles.numpadBtnText}>+{pct}%</Text>
+                      </TouchableOpacity>
+                    ))
+                  : [10, 20, 50, 100].map((amt) => (
+                      <TouchableOpacity
+                        key={amt}
+                        style={styles.numpadBtn}
+                        onPress={() => handleAddLineDiscountVal(amt)}
+                      >
+                        <Text style={styles.numpadBtnText}>+₱{amt}</Text>
+                      </TouchableOpacity>
+                    ))}
+              </View>
+
+              <View style={styles.quickCashActionRow}>
+                <TouchableOpacity
+                  style={[styles.quickCashActionBtn, styles.clearCashBtn]}
+                  onPress={() => setLineDiscountValue('0')}
+                >
+                  <Text style={styles.clearCashBtnText}>Clear Discount</Text>
+                </TouchableOpacity>
+              </View>
+
+              <View style={styles.inputGroup}>
+                <Text style={styles.fieldLabel}>Apply to Quantity (Max {editingCartItem?.quantity}) *:</Text>
+                <TextInput
+                  style={styles.textInputFullModal}
+                  placeholder="1"
+                  placeholderTextColor="#94A3B8"
+                  keyboardType="numeric"
+                  value={lineDiscountQty}
+                  onChangeText={setLineDiscountQty}
+                />
+              </View>
+
+              <View style={styles.modalActions}>
+                <TouchableOpacity style={styles.cancelModalBtn} onPress={() => setEditingCartItem(null)}>
+                  <Text style={styles.cancelModalBtnText}>Cancel</Text>
+                </TouchableOpacity>
+
+                <TouchableOpacity style={styles.confirmCheckoutBtn} onPress={handleSaveLineDiscount}>
+                  <Text style={styles.confirmCheckoutBtnText}>Apply Discount</Text>
+                </TouchableOpacity>
+              </View>
+            </View>
+          </View>
+        </Modal>
+
+        {/* MODAL 3: ORDER DISCOUNT (With Additive Shortcuts) */}
+        <Modal visible={isDiscountModalVisible} transparent animationType="fade" onRequestClose={() => setIsDiscountModalVisible(false)}>
+          <View style={styles.modalOverlay}>
+            <View style={styles.checkoutModalCard}>
+              <Text style={styles.modalTitle}>Apply Order Discount</Text>
+              <Text style={styles.fieldLabel}>Subtotal: ₱{subtotalAfterLineDiscounts.toFixed(2)}</Text>
+
+              <View style={styles.methodTabRow}>
+                <TouchableOpacity
+                  style={[styles.methodTabBtn, discountType === 'percent' && styles.methodTabBtnActive]}
+                  onPress={() => setDiscountType('percent')}
+                >
+                  <Text style={[styles.methodTabText, discountType === 'percent' && styles.methodTabTextActive]}>
+                    Percentage (%)
+                  </Text>
+                </TouchableOpacity>
+
+                <TouchableOpacity
+                  style={[styles.methodTabBtn, discountType === 'fixed' && styles.methodTabBtnActive]}
+                  onPress={() => setDiscountType('fixed')}
+                >
+                  <Text style={[styles.methodTabText, discountType === 'fixed' && styles.methodTabTextActive]}>
+                    Fixed Amount (₱)
+                  </Text>
+                </TouchableOpacity>
+              </View>
+
+              <View style={styles.inputGroup}>
+                <Text style={styles.fieldLabel}>Discount Value ({discountType === 'percent' ? '%' : '₱'}) *:</Text>
+                <TextInput
+                  style={styles.textInputFullModal}
+                  placeholder={discountType === 'percent' ? '0%' : '₱0.00'}
+                  placeholderTextColor="#94A3B8"
+                  keyboardType="numeric"
+                  value={discountValue}
+                  onChangeText={setDiscountValue}
+                />
+              </View>
+
+              {/* Additive Shortcut Buttons for Order Discount */}
+              <Text style={styles.fieldLabelMini}>Tap Shortcut to Add on Top:</Text>
+              <View style={styles.numpadGrid}>
+                {discountType === 'percent'
+                  ? [5, 10, 20].map((pct) => (
+                      <TouchableOpacity
+                        key={pct}
+                        style={styles.numpadBtn}
+                        onPress={() => handleAddOrderDiscountVal(pct)}
+                      >
+                        <Text style={styles.numpadBtnText}>+{pct}%</Text>
+                      </TouchableOpacity>
+                    ))
+                  : [10, 20, 50, 100].map((amt) => (
+                      <TouchableOpacity
+                        key={amt}
+                        style={styles.numpadBtn}
+                        onPress={() => handleAddOrderDiscountVal(amt)}
+                      >
+                        <Text style={styles.numpadBtnText}>+₱{amt}</Text>
+                      </TouchableOpacity>
+                    ))}
+              </View>
+
+              <View style={styles.quickCashActionRow}>
+                <TouchableOpacity
+                  style={[styles.quickCashActionBtn, styles.clearCashBtn]}
+                  onPress={() => setDiscountValue('0')}
+                >
+                  <Text style={styles.clearCashBtnText}>Clear Discount</Text>
+                </TouchableOpacity>
+              </View>
+
+              <View style={styles.modalActions}>
+                <TouchableOpacity style={styles.cancelModalBtn} onPress={() => setIsDiscountModalVisible(false)}>
+                  <Text style={styles.cancelModalBtnText}>Cancel</Text>
+                </TouchableOpacity>
+
+                <TouchableOpacity style={styles.confirmCheckoutBtn} onPress={handleApplyOrderDiscount}>
+                  <Text style={styles.confirmCheckoutBtnText}>Apply Discount</Text>
+                </TouchableOpacity>
+              </View>
+            </View>
+          </View>
+        </Modal>
+
+        {/* MODAL 4: CHECKOUT & ADDITIVE TENDERED AMOUNT SHORTCUTS (With Custom Payment Method Colors) */}
+        <Modal visible={isCheckoutModalVisible} transparent animationType="slide">
+          <View style={styles.modalOverlay}>
+            <View style={styles.checkoutModalCard}>
+              <Text style={styles.modalTitle}>Checkout Order (₱{grandTotal.toFixed(2)})</Text>
+
+              {/* Payment Method Selector Tabs */}
+              <View style={styles.methodTabRow}>
+                {(paymentMethods || []).map((pm) => {
+                  if (!pm) return null;
+                  const isActive = String(activeMethodName || '').toLowerCase() === String(pm.name || '').toLowerCase();
+                  const pmBg = isActive ? '#2563EB' : pm.color || '#F1F5F9';
+
+                  return (
+                    <TouchableOpacity
+                      key={pm.id}
+                      style={[
+                        styles.methodTabBtn,
+                        { backgroundColor: pmBg },
+                        isActive && styles.methodTabBtnActiveBorder,
+                      ]}
+                      onPress={() => {
+                        setActiveMethodName(pm.name || 'Cash');
+                        setSelectedPayMethodObj(pm);
+                      }}
+                    >
+                      <Text style={[styles.methodTabText, isActive && styles.methodTabTextActive]}>
+                        {pm.name || 'Cash'}
+                      </Text>
+                    </TouchableOpacity>
+                  );
+                })}
+              </View>
+
+              {String(activeMethodName || '').toLowerCase() === 'cash' ? (
+                <View style={styles.cashTenderedSection}>
+                  <Text style={styles.fieldLabel}>Cash Tendered Amount (₱) *:</Text>
+
+                  <TextInput
+                    style={styles.tenderedInputFull}
+                    placeholder="0.00"
+                    placeholderTextColor="#94A3B8"
+                    keyboardType="numeric"
+                    value={tenderedAmount ? String(tenderedAmount) : ''}
+                    onChangeText={(val) => setTenderedAmount(Number(val) || 0)}
+                  />
+
+                  {/* Additive Quick Cash Shortcuts (Tap 100 twice = 200, 20, 50, 100, 200, 500, 1000) */}
+                  <Text style={styles.fieldLabelMini}>Tap Cash Buttons to Add on Top:</Text>
+                  <View style={styles.numpadGrid}>
+                    {[20, 50, 100, 200, 500, 1000].map((amt) => (
+                      <TouchableOpacity
+                        key={amt}
+                        style={styles.numpadBtn}
+                        onPress={() => handleAddTenderedCash(amt)}
+                      >
+                        <Text style={styles.numpadBtnText}>+₱{amt}</Text>
+                      </TouchableOpacity>
+                    ))}
+                  </View>
+
+                  <View style={styles.quickCashActionRow}>
+                    <TouchableOpacity
+                      style={styles.quickCashActionBtn}
+                      onPress={() => setTenderedAmount(grandTotal)}
+                    >
+                      <Text style={styles.quickCashActionBtnText}>Exact Amount</Text>
+                    </TouchableOpacity>
+
+                    <TouchableOpacity
+                      style={[styles.quickCashActionBtn, styles.clearCashBtn]}
+                      onPress={() => setTenderedAmount(0)}
+                    >
+                      <Text style={styles.clearCashBtnText}>Clear</Text>
+                    </TouchableOpacity>
+                  </View>
+
+                  <View style={styles.changeDueRow}>
+                    <Text style={styles.changeDueLabel}>Change Due:</Text>
+                    <Text style={styles.changeDueVal}>
+                      ₱{Math.max(0, (Number(tenderedAmount) || 0) - grandTotal).toFixed(2)}
+                    </Text>
+                  </View>
+                </View>
+              ) : null}
+
+              <View style={styles.modalActions}>
+                <TouchableOpacity
+                  style={styles.cancelModalBtn}
+                  onPress={() => setIsCheckoutModalVisible(false)}
+                >
+                  <Text style={styles.cancelModalBtnText}>Cancel</Text>
+                </TouchableOpacity>
+
+                <TouchableOpacity
+                  style={styles.confirmCheckoutBtn}
+                  onPress={handleCompleteCheckout}
+                  disabled={checkoutLoading}
+                >
+                  {checkoutLoading ? (
+                    <ActivityIndicator color="#FFFFFF" size="small" />
+                  ) : (
+                    <Text style={styles.confirmCheckoutBtnText}>Complete Payment</Text>
+                  )}
+                </TouchableOpacity>
+              </View>
+            </View>
+          </View>
         </Modal>
 
         {/* Thermal Print Modal */}
@@ -700,7 +994,7 @@ const RegisterScreen = ({
           storeName={appName}
           isTaxEnabled={isTaxEnabled}
           taxRate={taxRate}
-          initialType="receipt"
+          initialType="order"
         />
       </View>
     </SafeAreaView>
@@ -845,6 +1139,9 @@ const styles = StyleSheet.create({
     alignItems: 'center',
     marginTop: 2,
   },
+  cartPriceCol: {
+    flex: 1,
+  },
   cartUnitPrice: {
     fontSize: 11,
     color: '#64748B',
@@ -854,8 +1151,11 @@ const styles = StyleSheet.create({
     fontWeight: '700',
     color: '#DC2626',
   },
+  lineDiscTouchBtn: {
+    paddingVertical: 4,
+  },
   itemDiscountBtnText: {
-    fontSize: 10,
+    fontSize: 11,
     fontWeight: '700',
     color: '#2563EB',
     marginTop: 1,
@@ -865,8 +1165,8 @@ const styles = StyleSheet.create({
     alignItems: 'center',
   },
   qtyBtn: {
-    width: 26,
-    height: 26,
+    width: 28,
+    height: 28,
     borderRadius: 8,
     backgroundColor: '#F1F5F9',
     justifyContent: 'center',
@@ -881,7 +1181,7 @@ const styles = StyleSheet.create({
     fontSize: 13,
     fontWeight: '800',
     color: '#0F172A',
-    marginHorizontal: 6,
+    marginHorizontal: 8,
   },
   emptyCartBox: {
     alignItems: 'center',
@@ -996,15 +1296,34 @@ const styles = StyleSheet.create({
     borderRadius: 24,
     padding: 20,
   },
+  modalHeaderPriceRow: {
+    flexDirection: 'row',
+    justifyContent: 'space-between',
+    alignItems: 'center',
+    marginBottom: 8,
+  },
+  pricePreviewBadgeBox: {
+    backgroundColor: '#DCFCE7',
+    paddingHorizontal: 10,
+    paddingVertical: 4,
+    borderRadius: 10,
+    borderWidth: 1,
+    borderColor: '#86EFAC',
+  },
+  pricePreviewBadgeText: {
+    fontSize: 12,
+    fontWeight: '800',
+    color: '#166534',
+  },
   modGroupScroll: {
     maxHeight: 280,
     marginVertical: 10,
   },
   modalTitle: {
-    fontSize: 18,
+    fontSize: 17,
     fontWeight: '800',
     color: '#0F172A',
-    marginBottom: 4,
+    flex: 1,
   },
   modGroupSectionCard: {
     backgroundColor: '#F8FAFC',
@@ -1052,9 +1371,9 @@ const styles = StyleSheet.create({
     borderWidth: 1,
     borderColor: '#CBD5E1',
   },
-  modChipActive: {
-    backgroundColor: '#2563EB',
-    borderColor: '#2563EB',
+  modChipActiveBorder: {
+    borderWidth: 2,
+    borderColor: '#1D4ED8',
   },
   modChipText: {
     fontSize: 11,
@@ -1063,7 +1382,7 @@ const styles = StyleSheet.create({
   },
   modChipTextActive: {
     color: '#FFFFFF',
-    fontWeight: '700',
+    fontWeight: '800',
   },
   methodTabRow: {
     flexDirection: 'row',
@@ -1077,8 +1396,9 @@ const styles = StyleSheet.create({
     borderRadius: 10,
     marginRight: 4,
   },
-  methodTabBtnActive: {
-    backgroundColor: '#2563EB',
+  methodTabBtnActiveBorder: {
+    borderWidth: 2,
+    borderColor: '#1D4ED8',
   },
   methodTabText: {
     fontSize: 12,
@@ -1087,12 +1407,19 @@ const styles = StyleSheet.create({
   },
   methodTabTextActive: {
     color: '#FFFFFF',
+    fontWeight: '800',
   },
   fieldLabel: {
     fontSize: 12,
     fontWeight: '700',
     color: '#334155',
     marginBottom: 6,
+  },
+  fieldLabelMini: {
+    fontSize: 11,
+    fontWeight: '700',
+    color: '#64748B',
+    marginBottom: 4,
   },
   tenderedInputFull: {
     height: 48,
@@ -1104,27 +1431,71 @@ const styles = StyleSheet.create({
     color: '#0F172A',
     borderWidth: 1,
     borderColor: '#CBD5E1',
+    marginBottom: 8,
+  },
+  textInputFullModal: {
+    height: 44,
+    backgroundColor: '#F1F5F9',
+    borderRadius: 12,
+    paddingHorizontal: 12,
+    fontSize: 14,
+    color: '#0F172A',
+    borderWidth: 1,
+    borderColor: '#CBD5E1',
+  },
+  inputGroup: {
     marginBottom: 10,
   },
   numpadGrid: {
     flexDirection: 'row',
+    flexWrap: 'wrap',
     justifyContent: 'space-between',
-    marginBottom: 10,
+    marginBottom: 8,
   },
   numpadBtn: {
-    flex: 0.22,
+    width: '31%',
     height: 38,
     backgroundColor: '#EFF6FF',
-    borderRadius: 8,
+    borderRadius: 10,
     justifyContent: 'center',
     alignItems: 'center',
     borderWidth: 1,
     borderColor: '#BFDBFE',
+    marginBottom: 6,
   },
   numpadBtnText: {
+    fontSize: 12,
+    fontWeight: '800',
+    color: '#1D4ED8',
+  },
+  quickCashActionRow: {
+    flexDirection: 'row',
+    justifyContent: 'space-between',
+    marginBottom: 10,
+  },
+  quickCashActionBtn: {
+    flex: 0.48,
+    height: 36,
+    backgroundColor: '#F1F5F9',
+    borderRadius: 8,
+    justifyContent: 'center',
+    alignItems: 'center',
+    borderWidth: 1,
+    borderColor: '#CBD5E1',
+  },
+  quickCashActionBtnText: {
     fontSize: 11,
     fontWeight: '700',
-    color: '#1D4ED8',
+    color: '#2563EB',
+  },
+  clearCashBtn: {
+    backgroundColor: '#FEE2E2',
+    borderColor: '#FCA5A5',
+  },
+  clearCashBtnText: {
+    fontSize: 11,
+    fontWeight: '700',
+    color: '#DC2626',
   },
   changeDueRow: {
     flexDirection: 'row',

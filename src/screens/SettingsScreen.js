@@ -37,6 +37,15 @@ import {
   openCashDrawerViaPrinter,
 } from '../services/printerService';
 
+const PRESET_LIGHT_COLORS = [
+  { name: 'Light Green', hex: '#DCFCE7' },
+  { name: 'Light Blue', hex: '#DBEAFE' },
+  { name: 'Light Yellow', hex: '#FEF3C7' },
+  { name: 'Light Red', hex: '#FEE2E2' },
+  { name: 'Light Grey', hex: '#F1F5F9' },
+  { name: 'Light Orange', hex: '#FFEDD5' },
+];
+
 const DEFAULT_BUSINESS_HOURS = {
   Monday: { isClosed: false, openTime: '09:00:00', closeTime: '21:00:00' },
   Tuesday: { isClosed: false, openTime: '09:00:00', closeTime: '21:00:00' },
@@ -52,10 +61,12 @@ const SettingsScreen = ({
   loggedInUser,
   people = [],
   rolePermissions = [],
-  appName = 'People Log',
+  appName = 'SetSales',
   onSaveAppName,
   theme = DEFAULT_THEME,
   onSaveTheme,
+  isDarkMode = false,
+  onSaveDarkMode,
   supabaseUrl = 'https://jbzajgmyaiapnwmagulb.supabase.co/rest/v1/',
   onSaveSupabaseUrl,
   supabaseKey = 'sb_publishable_mi7cJIQRtZ2ya_ieCJLN6w_OENAzgNt',
@@ -65,8 +76,6 @@ const SettingsScreen = ({
   onSaveTaxSettings,
   isAutoPrintEnabled = false,
   onSaveAutoPrint,
-  isDarkMode = false,
-  onSaveDarkMode,
   businessHours = DEFAULT_BUSINESS_HOURS,
   onSaveBusinessHours,
 }) => {
@@ -108,11 +117,13 @@ const SettingsScreen = ({
   // State for Payment Methods Management
   const [paymentMethodsList, setPaymentMethodsList] = useState([]);
   const [newPayMethodName, setNewPayMethodName] = useState('');
+  const [newPayMethodColor, setNewPayMethodColor] = useState(null);
   const [payMethodSuccessMsg, setPayMethodSuccessMsg] = useState('');
 
   // Editing Payment Method Modal State
   const [editingPayMethod, setEditingPayMethod] = useState(null);
   const [editPayMethodName, setEditPayMethodName] = useState('');
+  const [editPayMethodColor, setEditPayMethodColor] = useState(null);
 
   // Bluetooth Thermal Printer State
   const [printerStatus, setPrinterStatus] = useState(getPrinterStatus());
@@ -353,9 +364,10 @@ const SettingsScreen = ({
     }
 
     try {
-      const created = await createPaymentMethod({ name: trimmed });
+      const created = await createPaymentMethod({ name: trimmed, color: newPayMethodColor });
       setPaymentMethodsList((prev) => [...prev, created]);
       setNewPayMethodName('');
+      setNewPayMethodColor(null);
       setPayMethodSuccessMsg('Payment method added!');
       setTimeout(() => setPayMethodSuccessMsg(''), 3000);
     } catch (e) {
@@ -366,6 +378,7 @@ const SettingsScreen = ({
   const handleOpenEditPaymentMethod = (pm) => {
     setEditingPayMethod(pm);
     setEditPayMethodName(pm.name || '');
+    setEditPayMethodColor(pm.color || null);
   };
 
   const handleSaveEditPaymentMethod = async () => {
@@ -376,9 +389,9 @@ const SettingsScreen = ({
     }
 
     try {
-      await updatePaymentMethod(editingPayMethod.id, { name: trimmed });
+      await updatePaymentMethod(editingPayMethod.id, { name: trimmed, color: editPayMethodColor });
       setPaymentMethodsList((prev) =>
-        prev.map((item) => (item.id === editingPayMethod.id ? { ...item, name: trimmed } : item))
+        prev.map((item) => (item.id === editingPayMethod.id ? { ...item, name: trimmed, color: editPayMethodColor } : item))
       );
       setEditingPayMethod(null);
       setPayMethodSuccessMsg('Payment method updated!');
@@ -462,7 +475,7 @@ const SettingsScreen = ({
             </View>
           )}
 
-          {/* SUBMENU 1: ADMIN SETTINGS (Business Hours, Payment Methods, Store Name) */}
+          {/* SUBMENU 1: ADMIN SETTINGS */}
           {activeSubmenu === 'admin_settings' && (
             <View>
               {/* Application Name / Store Name */}
@@ -475,7 +488,7 @@ const SettingsScreen = ({
                 <View style={styles.inputContainer}>
                   <TextInput
                     style={styles.textInput}
-                    placeholder="People Log"
+                    placeholder="SetSales"
                     placeholderTextColor="#94A3B8"
                     value={inputAppName}
                     onChangeText={setInputAppName}
@@ -494,7 +507,7 @@ const SettingsScreen = ({
                 ) : null}
               </View>
 
-              {/* Business Hours & Operating Days */}
+              {/* Business Hours */}
               <View style={styles.cardSection}>
                 <Text style={styles.cardTitle}>🏪 Business Hours & Operating Days</Text>
                 <Text style={styles.cardSubtitle}>
@@ -543,7 +556,7 @@ const SettingsScreen = ({
               <View style={styles.cardSection}>
                 <Text style={styles.cardTitle}>💳 Payment Methods Management</Text>
                 <Text style={styles.cardSubtitle}>
-                  Add new checkout payment options, edit names, and toggle active/inactive status.
+                  Add checkout payment options, set custom badge background colors, and toggle active status.
                 </Text>
 
                 <View style={styles.inputContainer}>
@@ -559,6 +572,36 @@ const SettingsScreen = ({
                   </TouchableOpacity>
                 </View>
 
+                {/* Color Swatch Picker */}
+                <View style={styles.colorPickerBlock}>
+                  <Text style={styles.colorLabel}>Badge Background Color (Optional):</Text>
+                  <ScrollView horizontal showsHorizontalScrollIndicator={false} style={styles.swatchRow}>
+                    <TouchableOpacity
+                      style={[styles.swatchCircle, !newPayMethodColor && styles.swatchActive, { backgroundColor: '#FFFFFF' }]}
+                      onPress={() => setNewPayMethodColor(null)}
+                    >
+                      <Text style={styles.clearSwatchText}>✕</Text>
+                    </TouchableOpacity>
+
+                    {PRESET_LIGHT_COLORS.map((item) => (
+                      <TouchableOpacity
+                        key={item.hex}
+                        style={[styles.swatchCircle, { backgroundColor: item.hex }, newPayMethodColor === item.hex && styles.swatchActive]}
+                        onPress={() => setNewPayMethodColor(item.hex)}
+                      />
+                    ))}
+                  </ScrollView>
+
+                  <TextInput
+                    style={styles.colorHexInputSmall}
+                    placeholder="e.g. #DCFCE7 or leave empty for default"
+                    placeholderTextColor="#94A3B8"
+                    value={newPayMethodColor || ''}
+                    onChangeText={setNewPayMethodColor}
+                    autoCapitalize="characters"
+                  />
+                </View>
+
                 {payMethodSuccessMsg ? <Text style={styles.successText}>{payMethodSuccessMsg}</Text> : null}
 
                 <View style={styles.payMethodsListContainer}>
@@ -567,9 +610,10 @@ const SettingsScreen = ({
                     return (
                       <View key={pm.id} style={styles.payMethodRow}>
                         <View style={styles.payMethodLeft}>
+                          <View style={[styles.colorIndicatorPill, { backgroundColor: pm.color || '#EFF6FF' }]} />
                           <Text style={styles.payMethodName}>{pm.name}</Text>
                           <TouchableOpacity onPress={() => handleOpenEditPaymentMethod(pm)}>
-                            <Text style={styles.editPayMethodBtnText}>✏️ Edit Name</Text>
+                            <Text style={styles.editPayMethodBtnText}>✏️ Edit</Text>
                           </TouchableOpacity>
                         </View>
 
@@ -592,10 +636,10 @@ const SettingsScreen = ({
             </View>
           )}
 
-          {/* SUBMENU 2: APP SETTINGS (Printer, Tax, Supabase, Theme) */}
+          {/* SUBMENU 2: APP SETTINGS */}
           {activeSubmenu === 'app_settings' && (
             <View>
-              {/* Bluetooth Printer & Cash Drawer Management Section */}
+              {/* Bluetooth Printer */}
               <View style={styles.cardSection}>
                 <Text style={styles.cardTitle}>🖨️ Bluetooth Thermal Printer & Cash Drawer</Text>
                 <Text style={styles.cardSubtitle}>
@@ -655,7 +699,7 @@ const SettingsScreen = ({
                 </View>
               </View>
 
-              {/* Thermal Printer & Checkout Printing Section */}
+              {/* Thermal Printer Settings */}
               <View style={styles.cardSection}>
                 <Text style={styles.cardTitle}>🖨️ Printer & Checkout Settings</Text>
                 <Text style={styles.cardSubtitle}>
@@ -710,7 +754,7 @@ const SettingsScreen = ({
                 {taxSuccessMsg ? <Text style={styles.successText}>{taxSuccessMsg}</Text> : null}
               </View>
 
-              {/* Supabase Connection Section */}
+              {/* Supabase Connection */}
               <View style={styles.cardSection}>
                 <Text style={styles.cardTitle}>⚡ Supabase Connection</Text>
                 <Text style={styles.cardSubtitle}>
@@ -946,12 +990,12 @@ const SettingsScreen = ({
           </TouchableWithoutFeedback>
         </Modal>
 
-        {/* MODAL: EDIT PAYMENT METHOD */}
+        {/* MODAL: EDIT PAYMENT METHOD WITH COLOR PICKER */}
         <Modal visible={!!editingPayMethod} transparent animationType="fade" onRequestClose={() => setEditingPayMethod(null)}>
           <TouchableWithoutFeedback onPress={Keyboard.dismiss}>
             <View style={styles.modalOverlay}>
               <View style={styles.editModalCard}>
-                <Text style={styles.cardTitle}>Edit Payment Method Name</Text>
+                <Text style={styles.cardTitle}>Edit Payment Method</Text>
 
                 <TextInput
                   style={styles.modalTextInput}
@@ -959,6 +1003,33 @@ const SettingsScreen = ({
                   placeholderTextColor="#94A3B8"
                   value={editPayMethodName}
                   onChangeText={setEditPayMethodName}
+                />
+
+                <Text style={styles.colorLabel}>Badge Background Color:</Text>
+                <ScrollView horizontal showsHorizontalScrollIndicator={false} style={styles.swatchRow}>
+                  <TouchableOpacity
+                    style={[styles.swatchCircle, !editPayMethodColor && styles.swatchActive, { backgroundColor: '#FFFFFF' }]}
+                    onPress={() => setEditPayMethodColor(null)}
+                  >
+                    <Text style={styles.clearSwatchText}>✕</Text>
+                  </TouchableOpacity>
+
+                  {PRESET_LIGHT_COLORS.map((item) => (
+                    <TouchableOpacity
+                      key={item.hex}
+                      style={[styles.swatchCircle, { backgroundColor: item.hex }, editPayMethodColor === item.hex && styles.swatchActive]}
+                      onPress={() => setEditPayMethodColor(item.hex)}
+                    />
+                  ))}
+                </ScrollView>
+
+                <TextInput
+                  style={styles.colorHexInputSmall}
+                  placeholder="e.g. #DCFCE7 or leave empty for default"
+                  placeholderTextColor="#94A3B8"
+                  value={editPayMethodColor || ''}
+                  onChangeText={setEditPayMethodColor}
+                  autoCapitalize="characters"
                 />
 
                 <View style={styles.modalActionsRow}>
@@ -982,47 +1053,10 @@ const styles = StyleSheet.create({
   safeArea: {
     flex: 1,
     backgroundColor: '#F8FAFC',
-    paddingTop: '5%', // 5% Top Padding
-    paddingBottom: '5%', // 5% Bottom Padding
+    paddingTop: 10,
   },
   flexOne: {
     flex: 1,
-  },
-  header: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    justifyContent: 'space-between',
-    paddingHorizontal: 16,
-    paddingVertical: 14,
-    borderBottomWidth: 1,
-    borderBottomColor: '#E2E8F0',
-    backgroundColor: '#FFFFFF',
-  },
-  backButton: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    paddingVertical: 4,
-    paddingRight: 10,
-  },
-  backButtonIcon: {
-    fontSize: 24,
-    fontWeight: '300',
-    color: '#2563EB',
-    marginRight: 2,
-    marginTop: -2,
-  },
-  backButtonText: {
-    fontSize: 16,
-    fontWeight: '600',
-    color: '#2563EB',
-  },
-  headerTitle: {
-    fontSize: 18,
-    fontWeight: '700',
-    color: '#0F172A',
-  },
-  placeholderBox: {
-    width: 60,
   },
   backToSettingsBtn: {
     paddingVertical: 8,
@@ -1093,10 +1127,6 @@ const styles = StyleSheet.create({
     marginBottom: 20,
     borderWidth: 1,
     borderColor: '#E2E8F0',
-    shadowColor: '#000',
-    shadowOffset: { width: 0, height: 2 },
-    shadowOpacity: 0.04,
-    shadowRadius: 6,
     elevation: 2,
   },
   cardTitle: {
@@ -1242,6 +1272,12 @@ const styles = StyleSheet.create({
     alignItems: 'center',
     marginBottom: 14,
   },
+  darkModeBox: {
+    marginTop: 14,
+    paddingTop: 10,
+    borderTopWidth: 1,
+    borderTopColor: '#E2E8F0',
+  },
   bizDayRow: {
     flexDirection: 'row',
     justifyContent: 'space-between',
@@ -1308,6 +1344,7 @@ const styles = StyleSheet.create({
     marginTop: 6,
   },
   colorPickerBlock: {
+    marginTop: 10,
     marginBottom: 14,
   },
   colorLabel: {
@@ -1339,21 +1376,40 @@ const styles = StyleSheet.create({
     color: '#0F172A',
     fontWeight: '600',
   },
-  swatchRow: {
-    flexDirection: 'row',
-    paddingVertical: 2,
-  },
-  swatchCircle: {
-    width: 28,
-    height: 28,
-    borderRadius: 14,
-    marginRight: 10,
+  colorHexInputSmall: {
+    height: 38,
+    backgroundColor: '#F1F5F9',
+    borderRadius: 10,
+    paddingHorizontal: 10,
+    fontSize: 12,
+    color: '#0F172A',
+    fontWeight: '600',
+    marginTop: 6,
     borderWidth: 1,
     borderColor: '#CBD5E1',
+  },
+  swatchRow: {
+    flexDirection: 'row',
+    paddingVertical: 4,
+  },
+  swatchCircle: {
+    width: 32,
+    height: 32,
+    borderRadius: 16,
+    marginRight: 8,
+    borderWidth: 1.5,
+    borderColor: '#CBD5E1',
+    justifyContent: 'center',
+    alignItems: 'center',
   },
   swatchActive: {
     borderWidth: 3,
     borderColor: '#2563EB',
+  },
+  clearSwatchText: {
+    fontSize: 13,
+    color: '#64748B',
+    fontWeight: '800',
   },
   themeActionRow: {
     flexDirection: 'row',
@@ -1436,6 +1492,14 @@ const styles = StyleSheet.create({
     flexDirection: 'row',
     alignItems: 'center',
   },
+  colorIndicatorPill: {
+    width: 14,
+    height: 14,
+    borderRadius: 7,
+    marginRight: 8,
+    borderWidth: 1,
+    borderColor: '#CBD5E1',
+  },
   payMethodName: {
     fontSize: 14,
     fontWeight: '700',
@@ -1490,7 +1554,7 @@ const styles = StyleSheet.create({
   modalActionsRow: {
     flexDirection: 'row',
     justifyContent: 'flex-end',
-    marginTop: 8,
+    marginTop: 14,
   },
   cancelBtn: {
     paddingVertical: 8,

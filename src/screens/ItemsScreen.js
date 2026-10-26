@@ -46,6 +46,15 @@ import {
 
 const PRESET_ICONS = ['🍗', '🍔', '🍟', '🥤', '🧁', '🥐', '🍕', '🥗', '🍦', '☕', '🍱', '🥪', '🍜', '🍩', '🌮'];
 
+const PRESET_LIGHT_COLORS = [
+  { name: 'Light Green', hex: '#DCFCE7' },
+  { name: 'Light Blue', hex: '#DBEAFE' },
+  { name: 'Light Yellow', hex: '#FEF3C7' },
+  { name: 'Light Red', hex: '#FEE2E2' },
+  { name: 'Light Grey', hex: '#F1F5F9' },
+  { name: 'Light Orange', hex: '#FFEDD5' },
+];
+
 const ItemsScreen = ({ onBack, isDarkMode = false }) => {
   // Tab state: 'list' | 'add'
   const [activeTab, setActiveTab] = useState('list');
@@ -81,8 +90,10 @@ const ItemsScreen = ({ onBack, isDarkMode = false }) => {
 
   // Add Item Type form
   const [typeName, setTypeName] = useState('');
+  const [typeColor, setTypeColor] = useState(null);
   const [editingItemType, setEditingItemType] = useState(null);
   const [editTypeName, setEditTypeName] = useState('');
+  const [editTypeColor, setEditTypeColor] = useState(null);
 
   // Add Modifier Group & Options form
   const [groupName, setGroupName] = useState('');
@@ -91,11 +102,13 @@ const ItemsScreen = ({ onBack, isDarkMode = false }) => {
   const [selectedGroupForMod, setSelectedGroupForMod] = useState(null);
   const [modName, setModName] = useState('');
   const [modExtraPrice, setModExtraPrice] = useState('0');
+  const [modColor, setModColor] = useState(null);
 
   // Edit Modifier Choice Modal
   const [editingModifier, setEditingModifier] = useState(null);
   const [editModName, setEditModName] = useState('');
   const [editModExtraPrice, setEditModExtraPrice] = useState('0');
+  const [editModColor, setEditModColor] = useState(null);
 
   // Add Item form
   const [itemName, setItemName] = useState('');
@@ -145,7 +158,12 @@ const ItemsScreen = ({ onBack, isDarkMode = false }) => {
       ]);
       setCategoriesList(cats || []);
       setItemTypesList(types || []);
-      setItemsList(itms || []);
+
+      const sortedItems = Array.isArray(itms)
+        ? [...itms].sort((a, b) => (Number(b.price) || 0) - (Number(a.price) || 0))
+        : [];
+      setItemsList(sortedItems);
+
       setModifierGroupsList(modGroups || []);
       setModifiersList(mods || []);
       setItemModGroupMappings(mappings || []);
@@ -261,9 +279,10 @@ const ItemsScreen = ({ onBack, isDarkMode = false }) => {
     setLoadingText('Saving Item Type...');
     setLoading(true);
     try {
-      const created = await createItemType({ name: trimmed });
+      const created = await createItemType({ name: trimmed, color: typeColor });
       setItemTypesList((prev) => [created, ...prev]);
       setTypeName('');
+      setTypeColor(null);
       setActiveTab('list');
       triggerToast('Item Type saved successfully!');
       Keyboard.dismiss();
@@ -277,6 +296,7 @@ const ItemsScreen = ({ onBack, isDarkMode = false }) => {
   const handleOpenEditItemType = (typeObj) => {
     setEditingItemType(typeObj);
     setEditTypeName(typeObj.name || '');
+    setEditTypeColor(typeObj.color || null);
   };
 
   const handleSaveItemTypeEdit = async () => {
@@ -288,9 +308,9 @@ const ItemsScreen = ({ onBack, isDarkMode = false }) => {
     setLoadingText('Saving Item Type...');
     setLoading(true);
     try {
-      const updated = await updateItemType(editingItemType.id, { name: trimmed });
+      const updated = await updateItemType(editingItemType.id, { name: trimmed, color: editTypeColor });
       setItemTypesList((prev) =>
-        prev.map((t) => (t.id === editingItemType.id ? { ...t, ...updated, name: trimmed } : t))
+        prev.map((t) => (t.id === editingItemType.id ? { ...t, ...updated, name: trimmed, color: editTypeColor } : t))
       );
       setEditingItemType(null);
       triggerToast('Item Type saved successfully!');
@@ -385,10 +405,12 @@ const ItemsScreen = ({ onBack, isDarkMode = false }) => {
         group_id: selectedGroupForMod,
         name: trimmed,
         extra_price: Number(modExtraPrice) || 0,
+        color: modColor,
       });
       setModifiersList((prev) => [created, ...prev]);
       setModName('');
       setModExtraPrice('0');
+      setModColor(null);
       setActiveTab('list');
       triggerToast('Modifier Choice saved successfully!');
       Keyboard.dismiss();
@@ -403,6 +425,7 @@ const ItemsScreen = ({ onBack, isDarkMode = false }) => {
     setEditingModifier(mod);
     setEditModName(mod.name || '');
     setEditModExtraPrice(String(mod.extra_price || 0));
+    setEditModColor(mod.color || null);
   };
 
   const handleSaveModifierChoiceEdit = async () => {
@@ -417,9 +440,10 @@ const ItemsScreen = ({ onBack, isDarkMode = false }) => {
       const updated = await updateModifier(editingModifier.id, {
         name: trimmed,
         extra_price: Number(editModExtraPrice) || 0,
+        color: editModColor,
       });
       setModifiersList((prev) =>
-        prev.map((m) => (m.id === editingModifier.id ? { ...m, ...updated, name: trimmed, extra_price: Number(editModExtraPrice) || 0 } : m))
+        prev.map((m) => (m.id === editingModifier.id ? { ...m, ...updated, name: trimmed, extra_price: Number(editModExtraPrice) || 0, color: editModColor } : m))
       );
       setEditingModifier(null);
       triggerToast('Modifier saved successfully!');
@@ -579,6 +603,11 @@ const ItemsScreen = ({ onBack, isDarkMode = false }) => {
       Alert.alert('Required Field Missing', 'Please enter a Product Item Name.');
       return;
     }
+    if (!editSelectedCatId) {
+      Alert.alert('Required Field Missing', 'Please select a Category.');
+      return;
+    }
+
     const typeObj = itemTypesList.find((t) => String(t.id) === String(editSelectedTypeId));
     const itemTypeStr = typeObj ? typeObj.name : 'General';
 
@@ -630,19 +659,21 @@ const ItemsScreen = ({ onBack, isDarkMode = false }) => {
     ]);
   };
 
-  const filteredItemsList = itemsList.filter((item) => {
-    if (filterCatId !== 'all' && String(item.category_id) !== String(filterCatId)) {
-      return false;
-    }
-    if (itemSearchQuery.trim()) {
-      const q = itemSearchQuery.toLowerCase();
-      return (
-        item.name.toLowerCase().includes(q) ||
-        (item.description && item.description.toLowerCase().includes(q))
-      );
-    }
-    return true;
-  });
+  const filteredItemsList = (itemsList || [])
+    .filter((item) => {
+      if (filterCatId !== 'all' && String(item.category_id) !== String(filterCatId)) {
+        return false;
+      }
+      if (itemSearchQuery.trim()) {
+        const q = itemSearchQuery.toLowerCase();
+        return (
+          item.name.toLowerCase().includes(q) ||
+          (item.description && item.description.toLowerCase().includes(q))
+        );
+      }
+      return true;
+    })
+    .sort((a, b) => (Number(b.price) || 0) - (Number(a.price) || 0));
 
   const bgStyle = { backgroundColor: isDarkMode ? '#0F172A' : '#F8FAFC' };
   const cardBgStyle = {
@@ -665,6 +696,12 @@ const ItemsScreen = ({ onBack, isDarkMode = false }) => {
         {toastMsg ? (
           <View style={styles.toastBanner}>
             <Text style={styles.toastBannerText}>✅ {toastMsg}</Text>
+          </View>
+        ) : null}
+
+        {errorMsg ? (
+          <View style={styles.errorBanner}>
+            <Text style={styles.errorBannerText}>{errorMsg}</Text>
           </View>
         ) : null}
 
@@ -719,7 +756,7 @@ const ItemsScreen = ({ onBack, isDarkMode = false }) => {
         {/* ==================== SUBMENU 1: ITEMS ==================== */}
         {activeSubmenu === 'items' && (
           activeTab === 'list' ? (
-            <ScrollView contentContainerStyle={styles.scrollContent} showsVerticalScrollIndicator={false}>
+            <ScrollView contentContainerStyle={styles.scrollContent} showsVerticalScrollIndicator={false} keyboardShouldPersistTaps="handled">
               <View style={styles.filterRow}>
                 <TextInput
                   style={[styles.searchInput, cardBgStyle, titleTextStyle]}
@@ -747,10 +784,10 @@ const ItemsScreen = ({ onBack, isDarkMode = false }) => {
                     </View>
 
                     <View style={styles.actionRow}>
-                      <TouchableOpacity style={styles.editBtn} onPress={() => handleOpenEditItem(item)}>
+                      <TouchableOpacity style={styles.editBtn} onPress={() => handleOpenEditItem(item)} activeOpacity={0.7} hitSlop={{ top: 15, bottom: 15, left: 15, right: 15 }}>
                         <Text style={styles.editBtnText}>Edit</Text>
                       </TouchableOpacity>
-                      <TouchableOpacity style={styles.deleteBtn} onPress={() => handleDeleteItemConfirm(item)}>
+                      <TouchableOpacity style={styles.deleteBtn} onPress={() => handleDeleteItemConfirm(item)} activeOpacity={0.7} hitSlop={{ top: 15, bottom: 15, left: 15, right: 15 }}>
                         <Text style={styles.deleteBtnText}>Delete</Text>
                       </TouchableOpacity>
                     </View>
@@ -810,6 +847,23 @@ const ItemsScreen = ({ onBack, isDarkMode = false }) => {
                       >
                         <Text style={[styles.selectChipText, selectedCatId === c.id && styles.selectChipTextActive]}>
                           {c.name}
+                        </Text>
+                      </TouchableOpacity>
+                    ))}
+                  </ScrollView>
+                </View>
+
+                <View style={styles.inputGroup}>
+                  <Text style={[styles.fieldLabel, subTextStyle]}>Item Type *:</Text>
+                  <ScrollView horizontal showsHorizontalScrollIndicator={false} style={styles.chipRow}>
+                    {itemTypesList.map((t) => (
+                      <TouchableOpacity
+                        key={t.id}
+                        style={[styles.selectChip, selectedTypeId === t.id && styles.selectChipActive]}
+                        onPress={() => setSelectedTypeId(t.id)}
+                      >
+                        <Text style={[styles.selectChipText, selectedTypeId === t.id && styles.selectChipTextActive]}>
+                          {t.name}
                         </Text>
                       </TouchableOpacity>
                     ))}
@@ -899,7 +953,10 @@ const ItemsScreen = ({ onBack, isDarkMode = false }) => {
               {itemTypesList.map((t) => (
                 <View key={t.id} style={[styles.dataRow, cardBgStyle]}>
                   <View style={styles.dataRowInfo}>
-                    <Text style={[styles.dataRowName, titleTextStyle]}>{t.name}</Text>
+                    <View style={styles.rowTypeBadgeGroup}>
+                      {t.color ? <View style={[styles.colorIndicatorPill, { backgroundColor: t.color }]} /> : null}
+                      <Text style={[styles.dataRowName, titleTextStyle]}>{t.name}</Text>
+                    </View>
                   </View>
 
                   <View style={styles.actionRow}>
@@ -926,6 +983,36 @@ const ItemsScreen = ({ onBack, isDarkMode = false }) => {
                     placeholderTextColor="#94A3B8"
                     value={typeName}
                     onChangeText={setTypeName}
+                  />
+                </View>
+
+                {/* Color Swatch Picker */}
+                <View style={styles.colorPickerBlock}>
+                  <Text style={[styles.fieldLabel, subTextStyle]}>Type Badge Color (Optional):</Text>
+                  <ScrollView horizontal showsHorizontalScrollIndicator={false} style={styles.chipRow}>
+                    <TouchableOpacity
+                      style={[styles.swatchCircle, !typeColor && styles.swatchActive, { backgroundColor: '#FFFFFF' }]}
+                      onPress={() => setTypeColor(null)}
+                    >
+                      <Text style={styles.clearSwatchText}>✕</Text>
+                    </TouchableOpacity>
+
+                    {PRESET_LIGHT_COLORS.map((item) => (
+                      <TouchableOpacity
+                        key={item.hex}
+                        style={[styles.swatchCircle, { backgroundColor: item.hex }, typeColor === item.hex && styles.swatchActive]}
+                        onPress={() => setTypeColor(item.hex)}
+                      />
+                    ))}
+                  </ScrollView>
+
+                  <TextInput
+                    style={[styles.textInputFull, cardBgStyle, titleTextStyle, { marginTop: 6 }]}
+                    placeholder="e.g. #DBEAFE or leave empty for default"
+                    placeholderTextColor="#94A3B8"
+                    value={typeColor || ''}
+                    onChangeText={setTypeColor}
+                    autoCapitalize="characters"
                   />
                 </View>
 
@@ -962,9 +1049,12 @@ const ItemsScreen = ({ onBack, isDarkMode = false }) => {
                     <Text style={[styles.fieldLabel, subTextStyle]}>Modifier Choices ({groupMods.length}):</Text>
                     {groupMods.map((mod) => (
                       <View key={mod.id} style={styles.modChoiceRow}>
-                        <Text style={[styles.modChoiceName, titleTextStyle]}>
-                          • {mod.name} {Number(mod.extra_price) > 0 ? `(+₱${Number(mod.extra_price).toFixed(2)})` : ''}
-                        </Text>
+                        <View style={styles.rowModNameGroup}>
+                          {mod.color ? <View style={[styles.colorIndicatorPill, { backgroundColor: mod.color }]} /> : null}
+                          <Text style={[styles.modChoiceName, titleTextStyle]}>
+                            • {mod.name} {Number(mod.extra_price) > 0 ? `(+₱${Number(mod.extra_price).toFixed(2)})` : ''}
+                          </Text>
+                        </View>
 
                         <View style={styles.actionRow}>
                           <TouchableOpacity style={styles.editBtn} onPress={() => handleOpenEditModifierChoice(mod)}>
@@ -1068,6 +1158,36 @@ const ItemsScreen = ({ onBack, isDarkMode = false }) => {
                   />
                 </View>
 
+                {/* Color Swatch Picker */}
+                <View style={styles.colorPickerBlock}>
+                  <Text style={[styles.fieldLabel, subTextStyle]}>Badge / Option Color (Optional):</Text>
+                  <ScrollView horizontal showsHorizontalScrollIndicator={false} style={styles.chipRow}>
+                    <TouchableOpacity
+                      style={[styles.swatchCircle, !modColor && styles.swatchActive, { backgroundColor: '#FFFFFF' }]}
+                      onPress={() => setModColor(null)}
+                    >
+                      <Text style={styles.clearSwatchText}>✕</Text>
+                    </TouchableOpacity>
+
+                    {PRESET_LIGHT_COLORS.map((item) => (
+                      <TouchableOpacity
+                        key={item.hex}
+                        style={[styles.swatchCircle, { backgroundColor: item.hex }, modColor === item.hex && styles.swatchActive]}
+                        onPress={() => setModColor(item.hex)}
+                      />
+                    ))}
+                  </ScrollView>
+
+                  <TextInput
+                    style={[styles.textInputFull, cardBgStyle, titleTextStyle, { marginTop: 6 }]}
+                    placeholder="e.g. #DCFCE7 or leave empty for default"
+                    placeholderTextColor="#94A3B8"
+                    value={modColor || ''}
+                    onChangeText={setModColor}
+                    autoCapitalize="characters"
+                  />
+                </View>
+
                 <TouchableOpacity style={styles.addBtnLarge} onPress={handleAddModifierChoice} activeOpacity={0.8}>
                   <Text style={styles.addBtnText}>+ Save Modifier Choice</Text>
                 </TouchableOpacity>
@@ -1105,7 +1225,7 @@ const ItemsScreen = ({ onBack, isDarkMode = false }) => {
           </TouchableWithoutFeedback>
         </Modal>
 
-        {/* MODAL: EDIT ITEM TYPE */}
+        {/* MODAL: EDIT ITEM TYPE WITH COLOR PICKER */}
         <Modal visible={!!editingItemType} transparent animationType="fade" onRequestClose={() => setEditingItemType(null)}>
           <TouchableWithoutFeedback onPress={Keyboard.dismiss}>
             <View style={styles.modalOverlay}>
@@ -1117,6 +1237,34 @@ const ItemsScreen = ({ onBack, isDarkMode = false }) => {
                   onChangeText={setEditTypeName}
                   placeholder="Item Type Name"
                 />
+
+                <Text style={styles.fieldLabel}>Type Badge Color:</Text>
+                <ScrollView horizontal showsHorizontalScrollIndicator={false} style={styles.chipRow}>
+                  <TouchableOpacity
+                    style={[styles.swatchCircle, !editTypeColor && styles.swatchActive, { backgroundColor: '#FFFFFF' }]}
+                    onPress={() => setEditTypeColor(null)}
+                  >
+                    <Text style={styles.clearSwatchText}>✕</Text>
+                  </TouchableOpacity>
+
+                  {PRESET_LIGHT_COLORS.map((item) => (
+                    <TouchableOpacity
+                      key={item.hex}
+                      style={[styles.swatchCircle, { backgroundColor: item.hex }, editTypeColor === item.hex && styles.swatchActive]}
+                      onPress={() => setEditTypeColor(item.hex)}
+                    />
+                  ))}
+                </ScrollView>
+
+                <TextInput
+                  style={styles.modalTextInput}
+                  value={editTypeColor || ''}
+                  onChangeText={setEditTypeColor}
+                  placeholder="Hex color e.g. #DBEAFE"
+                  placeholderTextColor="#94A3B8"
+                  autoCapitalize="characters"
+                />
+
                 <View style={styles.modalActions}>
                   <TouchableOpacity style={styles.cancelBtn} onPress={() => setEditingItemType(null)}>
                     <Text style={styles.cancelBtnText}>Cancel</Text>
@@ -1130,7 +1278,7 @@ const ItemsScreen = ({ onBack, isDarkMode = false }) => {
           </TouchableWithoutFeedback>
         </Modal>
 
-        {/* MODAL: EDIT MODIFIER CHOICE */}
+        {/* MODAL: EDIT MODIFIER CHOICE WITH COLOR PICKER */}
         <Modal visible={!!editingModifier} transparent animationType="fade" onRequestClose={() => setEditingModifier(null)}>
           <TouchableWithoutFeedback onPress={Keyboard.dismiss}>
             <View style={styles.modalOverlay}>
@@ -1149,6 +1297,34 @@ const ItemsScreen = ({ onBack, isDarkMode = false }) => {
                   keyboardType="numeric"
                   placeholder="Extra Price (₱)"
                 />
+
+                <Text style={styles.fieldLabel}>Option / Badge Color:</Text>
+                <ScrollView horizontal showsHorizontalScrollIndicator={false} style={styles.chipRow}>
+                  <TouchableOpacity
+                    style={[styles.swatchCircle, !editModColor && styles.swatchActive, { backgroundColor: '#FFFFFF' }]}
+                    onPress={() => setEditModColor(null)}
+                  >
+                    <Text style={styles.clearSwatchText}>✕</Text>
+                  </TouchableOpacity>
+
+                  {PRESET_LIGHT_COLORS.map((item) => (
+                    <TouchableOpacity
+                      key={item.hex}
+                      style={[styles.swatchCircle, { backgroundColor: item.hex }, editModColor === item.hex && styles.swatchActive]}
+                      onPress={() => setEditModColor(item.hex)}
+                    />
+                  ))}
+                </ScrollView>
+
+                <TextInput
+                  style={styles.modalTextInput}
+                  value={editModColor || ''}
+                  onChangeText={setEditModColor}
+                  placeholder="Hex color e.g. #DCFCE7"
+                  placeholderTextColor="#94A3B8"
+                  autoCapitalize="characters"
+                />
+
                 <View style={styles.modalActions}>
                   <TouchableOpacity style={styles.cancelBtn} onPress={() => setEditingModifier(null)}>
                     <Text style={styles.cancelBtnText}>Cancel</Text>
@@ -1184,6 +1360,40 @@ const ItemsScreen = ({ onBack, isDarkMode = false }) => {
                       <Text style={styles.fieldLabel}>Cost (₱) *:</Text>
                       <TextInput style={styles.textInputFullModal} keyboardType="numeric" value={editItemCost} onChangeText={setEditItemCost} />
                     </View>
+                  </View>
+
+                  <View style={styles.inputGroup}>
+                    <Text style={styles.fieldLabel}>Category *:</Text>
+                    <ScrollView horizontal showsHorizontalScrollIndicator={false} style={styles.chipRow}>
+                      {categoriesList.map((c) => (
+                        <TouchableOpacity
+                          key={c.id}
+                          style={[styles.selectChip, editSelectedCatId === c.id && styles.selectChipActive]}
+                          onPress={() => setEditSelectedCatId(c.id)}
+                        >
+                          <Text style={[styles.selectChipText, editSelectedCatId === c.id && styles.selectChipTextActive]}>
+                            {c.name}
+                          </Text>
+                        </TouchableOpacity>
+                      ))}
+                    </ScrollView>
+                  </View>
+
+                  <View style={styles.inputGroup}>
+                    <Text style={styles.fieldLabel}>Item Type *:</Text>
+                    <ScrollView horizontal showsHorizontalScrollIndicator={false} style={styles.chipRow}>
+                      {itemTypesList.map((t) => (
+                        <TouchableOpacity
+                          key={t.id}
+                          style={[styles.selectChip, editSelectedTypeId === t.id && styles.selectChipActive]}
+                          onPress={() => setEditSelectedTypeId(t.id)}
+                        >
+                          <Text style={[styles.selectChipText, editSelectedTypeId === t.id && styles.selectChipTextActive]}>
+                            {t.name}
+                          </Text>
+                        </TouchableOpacity>
+                      ))}
+                    </ScrollView>
                   </View>
 
                   <View style={styles.inputGroup}>
@@ -1387,6 +1597,33 @@ const styles = StyleSheet.create({
     borderWidth: 1,
     borderColor: '#E2E8F0',
   },
+  colorPickerBlock: {
+    marginTop: 8,
+    marginBottom: 10,
+  },
+  swatchRow: {
+    flexDirection: 'row',
+    paddingVertical: 4,
+  },
+  swatchCircle: {
+    width: 30,
+    height: 30,
+    borderRadius: 15,
+    marginRight: 8,
+    borderWidth: 1.5,
+    borderColor: '#CBD5E1',
+    justifyContent: 'center',
+    alignItems: 'center',
+  },
+  swatchActive: {
+    borderWidth: 3,
+    borderColor: '#2563EB',
+  },
+  clearSwatchText: {
+    fontSize: 12,
+    color: '#64748B',
+    fontWeight: '800',
+  },
   addBtnLarge: {
     backgroundColor: '#2563EB',
     height: 48,
@@ -1413,6 +1650,18 @@ const styles = StyleSheet.create({
   },
   dataRowInfo: {
     flex: 1,
+  },
+  rowTypeBadgeGroup: {
+    flexDirection: 'row',
+    alignItems: 'center',
+  },
+  colorIndicatorPill: {
+    width: 14,
+    height: 14,
+    borderRadius: 7,
+    marginRight: 8,
+    borderWidth: 1,
+    borderColor: '#CBD5E1',
   },
   dataRowName: {
     fontSize: 15,
@@ -1470,6 +1719,10 @@ const styles = StyleSheet.create({
     paddingVertical: 6,
     borderBottomWidth: 1,
     borderBottomColor: '#F1F5F9',
+  },
+  rowModNameGroup: {
+    flexDirection: 'row',
+    alignItems: 'center',
   },
   modChoiceName: {
     fontSize: 13,
