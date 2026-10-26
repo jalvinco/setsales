@@ -1,5 +1,5 @@
 Add-Type -AssemblyName System.Drawing
-$source = 'C:\Users\TEST\Downloads\Gemini_Generated_Image_z69pyz69pyz69pyz.jpg'
+$source = 'C:\Users\TEST\Downloads\Gemini_Generated_Image_jueceejueceejuec.jpg'
 $img = [System.Drawing.Image]::FromFile($source)
 
 $folders = @{
@@ -27,7 +27,7 @@ foreach ($folderName in $folders.Keys) {
     $bmp.Save($p2, [System.Drawing.Imaging.ImageFormat]::Png)
     $bmp.Dispose()
 
-    Write-Host "Generated $folderName ($size x $size) from new ship icon image"
+    Write-Host "Generated $folderName ($size x $size) from new ship cashier icon image"
 }
 
 $img.Dispose()

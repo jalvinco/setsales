@@ -307,6 +307,7 @@ export default function App() {
         rate: u.rate,
         half_rate: u.half_rate,
         extra_rate: u.extra_rate,
+        color: u.color || null,
         status: u.last_action === 'In' ? 'Logged In' : 'Logged Out',
         lastLoginFormatted: formatLastLoginDisplay(u.last_login),
         rawUser: u,
@@ -460,7 +461,7 @@ export default function App() {
     }
   };
 
-  const handleAddPerson = async (name, role = 3, rate = 0, halfRate = 0, extraRate = 0) => {
+  const handleAddPerson = async (name, role = 3, rate = 0, halfRate = 0, extraRate = 0, color = null) => {
     try {
       await createUser({
         name,
@@ -469,6 +470,7 @@ export default function App() {
         rate: Number(rate) || 0,
         half_rate: Number(halfRate) || 0,
         extra_rate: Number(extraRate) || 0,
+        color: color || null,
       });
       await loadAllSupabaseData();
     } catch (e) {
@@ -476,7 +478,7 @@ export default function App() {
     }
   };
 
-  const handleEditPerson = async (personId, newName, newRole = 3, newRate = 0, newHalfRate = 0, newExtraRate = 0) => {
+  const handleEditPerson = async (personId, newName, newRole = 3, newRate = 0, newHalfRate = 0, newExtraRate = 0, color = null) => {
     try {
       await updateUser(personId, {
         name: newName,
@@ -484,6 +486,7 @@ export default function App() {
         rate: Number(newRate) || 0,
         half_rate: Number(newHalfRate) || 0,
         extra_rate: Number(newExtraRate) || 0,
+        color: color || null,
       });
       await loadAllSupabaseData();
     } catch (e) {
@@ -1005,7 +1008,7 @@ const styles = StyleSheet.create({
     alignItems: 'center',
     justifyContent: 'space-between',
     paddingHorizontal: 18,
-    paddingTop: Platform.OS === 'ios' ? 44 : (StatusBar.currentHeight ? StatusBar.currentHeight + 8 : 32),
+    paddingTop: Platform.OS === 'ios' ? 48 : (StatusBar.currentHeight ? StatusBar.currentHeight + 12 : 38),
     paddingBottom: 12,
     borderBottomWidth: 1,
     elevation: 3,
@@ -1068,12 +1071,14 @@ const styles = StyleSheet.create({
   },
   globalBottomBar: {
     flexDirection: 'row',
-    height: 62,
+    paddingBottom: Platform.OS === 'ios' ? 24 : 36,
+    paddingTop: 8,
+    minHeight: Platform.OS === 'ios' ? 76 : 88,
     borderTopWidth: 1,
-    elevation: 8,
+    elevation: 10,
     shadowColor: '#000',
     shadowOffset: { width: 0, height: -3 },
-    shadowOpacity: 0.08,
+    shadowOpacity: 0.1,
     shadowRadius: 6,
     zIndex: 99,
   },
@@ -1081,7 +1086,7 @@ const styles = StyleSheet.create({
     flex: 1,
     justifyContent: 'center',
     alignItems: 'center',
-    paddingVertical: 4,
+    paddingVertical: 6,
   },
   bottomTabBtnActive: {
     backgroundColor: 'rgba(37, 99, 235, 0.08)',
