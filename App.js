@@ -772,97 +772,101 @@ export default function App() {
       ) : null}
 
       {/* MODAL: LOGIN */}
-      <Modal visible={isLoginModalVisible} transparent animationType="fade" onRequestClose={() => setIsLoginModalVisible(false)}>
-        <TouchableWithoutFeedback onPress={() => setIsLoginModalVisible(false)}>
-          <View style={styles.modalOverlay}>
-            <TouchableWithoutFeedback>
-              <View style={styles.loginCard}>
-                <Text style={styles.loginTitle}>👤 User Access Login</Text>
-                <Text style={styles.loginNote}>
-                  Login to enable settings and actions based on your assigned user role.
-                </Text>
+      {isLoginModalVisible ? (
+        <Modal visible={true} transparent animationType="fade" onRequestClose={() => setIsLoginModalVisible(false)}>
+          <TouchableWithoutFeedback onPress={() => setIsLoginModalVisible(false)}>
+            <View style={styles.modalOverlay}>
+              <TouchableWithoutFeedback>
+                <View style={styles.loginCard}>
+                  <Text style={styles.loginTitle}>👤 User Access Login</Text>
+                  <Text style={styles.loginNote}>
+                    Login to enable settings and actions based on your assigned user role.
+                  </Text>
 
-                <View style={styles.inputGroup}>
-                  <Text style={styles.fieldLabel}>Full Name *</Text>
-                  <TextInput
-                    style={styles.textInputFull}
-                    placeholder="e.g. John Doe"
-                    placeholderTextColor="#94A3B8"
-                    value={loginNameInput}
-                    onChangeText={setLoginNameInput}
-                  />
+                  <View style={styles.inputGroup}>
+                    <Text style={styles.fieldLabel}>Full Name *</Text>
+                    <TextInput
+                      style={styles.textInputFull}
+                      placeholder="e.g. John Doe"
+                      placeholderTextColor="#94A3B8"
+                      value={loginNameInput}
+                      onChangeText={setLoginNameInput}
+                    />
+                  </View>
+
+                  <View style={styles.inputGroup}>
+                    <Text style={styles.fieldLabel}>6-Digit PIN *</Text>
+                    <TextInput
+                      style={styles.textInputFull}
+                      placeholder="Enter 6-digit PIN"
+                      placeholderTextColor="#94A3B8"
+                      keyboardType="numeric"
+                      secureTextEntry={true}
+                      maxLength={6}
+                      value={loginPinInput}
+                      onChangeText={setLoginPinInput}
+                    />
+                  </View>
+
+                  {loginError ? <Text style={styles.errorText}>{loginError}</Text> : null}
+
+                  <View style={styles.modalActions}>
+                    <TouchableOpacity style={styles.closeBtn} onPress={() => setIsLoginModalVisible(false)}>
+                      <Text style={styles.closeBtnText}>Cancel</Text>
+                    </TouchableOpacity>
+                    <TouchableOpacity style={styles.saveDrawerBtn} onPress={handleUserLogin}>
+                      <Text style={styles.saveDrawerBtnText}>Login</Text>
+                    </TouchableOpacity>
+                  </View>
                 </View>
-
-                <View style={styles.inputGroup}>
-                  <Text style={styles.fieldLabel}>6-Digit PIN *</Text>
-                  <TextInput
-                    style={styles.textInputFull}
-                    placeholder="Enter 6-digit PIN"
-                    placeholderTextColor="#94A3B8"
-                    keyboardType="numeric"
-                    secureTextEntry={true}
-                    maxLength={6}
-                    value={loginPinInput}
-                    onChangeText={setLoginPinInput}
-                  />
-                </View>
-
-                {loginError ? <Text style={styles.errorText}>{loginError}</Text> : null}
-
-                <View style={styles.modalActions}>
-                  <TouchableOpacity style={styles.closeBtn} onPress={() => setIsLoginModalVisible(false)}>
-                    <Text style={styles.closeBtnText}>Cancel</Text>
-                  </TouchableOpacity>
-                  <TouchableOpacity style={styles.saveDrawerBtn} onPress={handleUserLogin}>
-                    <Text style={styles.saveDrawerBtnText}>Login</Text>
-                  </TouchableOpacity>
-                </View>
-              </View>
-            </TouchableWithoutFeedback>
-          </View>
-        </TouchableWithoutFeedback>
-      </Modal>
+              </TouchableWithoutFeedback>
+            </View>
+          </TouchableWithoutFeedback>
+        </Modal>
+      ) : null}
 
       {/* MODAL: LOGGED IN USER SESSION */}
-      <Modal visible={isUserSessionModalVisible} transparent animationType="fade" onRequestClose={() => setIsUserSessionModalVisible(false)}>
-        <TouchableWithoutFeedback onPress={() => setIsUserSessionModalVisible(false)}>
-          <View style={styles.modalOverlay}>
-            <TouchableWithoutFeedback>
-              <View style={styles.loginCard}>
-                <Text style={styles.loginTitle}>👤 {loggedInUser?.name}</Text>
-                <Text style={styles.loginNote}>
-                  Role: {Number(loggedInUser?.role) === 1 ? 'Admin (Role 1)' : 'Staff'}
-                </Text>
+      {isUserSessionModalVisible ? (
+        <Modal visible={true} transparent animationType="fade" onRequestClose={() => setIsUserSessionModalVisible(false)}>
+          <TouchableWithoutFeedback onPress={() => setIsUserSessionModalVisible(false)}>
+            <View style={styles.modalOverlay}>
+              <TouchableWithoutFeedback>
+                <View style={styles.loginCard}>
+                  <Text style={styles.loginTitle}>👤 {loggedInUser?.name}</Text>
+                  <Text style={styles.loginNote}>
+                    Role: {Number(loggedInUser?.role) === 1 ? 'Admin (Role 1)' : 'Staff'}
+                  </Text>
 
-                <TouchableOpacity
-                  style={styles.sessionOptionBtn}
-                  onPress={() => {
-                    setIsUserSessionModalVisible(false);
-                    setIsChangePinModalVisible(true);
-                  }}
-                >
-                  <Text style={styles.sessionOptionBtnText}>🔑 Change PIN</Text>
-                </TouchableOpacity>
+                  <TouchableOpacity
+                    style={styles.sessionOptionBtn}
+                    onPress={() => {
+                      setIsUserSessionModalVisible(false);
+                      setIsChangePinModalVisible(true);
+                    }}
+                  >
+                    <Text style={styles.sessionOptionBtnText}>🔑 Change PIN</Text>
+                  </TouchableOpacity>
 
-                <TouchableOpacity
-                  style={[styles.sessionOptionBtn, styles.logoutBtn]}
-                  onPress={() => {
-                    handleSetLoggedInUser(null);
-                    setIsUserSessionModalVisible(false);
-                    Alert.alert('Logged Out', 'You have been logged out.');
-                  }}
-                >
-                  <Text style={styles.logoutBtnText}>🚪 Log Out</Text>
-                </TouchableOpacity>
+                  <TouchableOpacity
+                    style={[styles.sessionOptionBtn, styles.logoutBtn]}
+                    onPress={() => {
+                      handleSetLoggedInUser(null);
+                      setIsUserSessionModalVisible(false);
+                      Alert.alert('Logged Out', 'You have been logged out.');
+                    }}
+                  >
+                    <Text style={styles.logoutBtnText}>🚪 Log Out</Text>
+                  </TouchableOpacity>
 
-                <TouchableOpacity style={styles.closeBtnFull} onPress={() => setIsUserSessionModalVisible(false)}>
-                  <Text style={styles.closeBtnText}>Close</Text>
-                </TouchableOpacity>
-              </View>
-            </TouchableWithoutFeedback>
-          </View>
-        </TouchableWithoutFeedback>
-      </Modal>
+                  <TouchableOpacity style={styles.closeBtnFull} onPress={() => setIsUserSessionModalVisible(false)}>
+                    <Text style={styles.closeBtnText}>Close</Text>
+                  </TouchableOpacity>
+                </View>
+              </TouchableWithoutFeedback>
+            </View>
+          </TouchableWithoutFeedback>
+        </Modal>
+      ) : null}
 
       {/* MODAL: CHANGE PIN */}
       <Modal visible={isChangePinModalVisible} transparent animationType="fade" onRequestClose={() => setIsChangePinModalVisible(false)}>
@@ -917,71 +921,73 @@ export default function App() {
       </Modal>
 
       {/* First Launch Admin Setup Modal */}
-      <Modal visible={isFirstLaunchAdminModalVisible} transparent animationType="slide">
-        <TouchableWithoutFeedback onPress={Keyboard.dismiss}>
-          <View style={styles.adminModalOverlay}>
-            <View style={styles.adminModalCard}>
-              <Text style={styles.adminModalTitle}>👑 Setup System Admin Account</Text>
-              <Text style={styles.adminModalSub}>
-                Welcome to People Log! Create your primary Admin account to secure App Settings & Directory.
-              </Text>
+      {isFirstLaunchAdminModalVisible ? (
+        <Modal visible={true} transparent animationType="slide">
+          <TouchableWithoutFeedback onPress={Keyboard.dismiss}>
+            <View style={styles.adminModalOverlay}>
+              <View style={styles.adminModalCard}>
+                <Text style={styles.adminModalTitle}>👑 Setup System Admin Account</Text>
+                <Text style={styles.adminModalSub}>
+                  Welcome to People Log! Create your primary Admin account to secure App Settings & Directory.
+                </Text>
 
-              <View style={styles.inputGroup}>
-                <Text style={styles.fieldLabel}>Admin Full Name *:</Text>
-                <TextInput
-                  style={styles.textInputFull}
-                  placeholder="e.g. Manager John"
-                  placeholderTextColor="#94A3B8"
-                  value={adminNameInput}
-                  onChangeText={setAdminNameInput}
-                />
+                <View style={styles.inputGroup}>
+                  <Text style={styles.fieldLabel}>Admin Full Name *:</Text>
+                  <TextInput
+                    style={styles.textInputFull}
+                    placeholder="e.g. Manager John"
+                    placeholderTextColor="#94A3B8"
+                    value={adminNameInput}
+                    onChangeText={setAdminNameInput}
+                  />
+                </View>
+
+                <View style={styles.inputGroup}>
+                  <Text style={styles.fieldLabel}>Create 6-Digit Admin PIN *:</Text>
+                  <TextInput
+                    style={styles.textInputFull}
+                    placeholder="Enter 6-digit PIN"
+                    placeholderTextColor="#94A3B8"
+                    keyboardType="numeric"
+                    secureTextEntry={true}
+                    maxLength={6}
+                    value={adminPinInput}
+                    onChangeText={setAdminPinInput}
+                  />
+                </View>
+
+                <View style={styles.inputGroup}>
+                  <Text style={styles.fieldLabel}>Confirm Admin PIN *:</Text>
+                  <TextInput
+                    style={styles.textInputFull}
+                    placeholder="Confirm 6-digit PIN"
+                    placeholderTextColor="#94A3B8"
+                    keyboardType="numeric"
+                    secureTextEntry={true}
+                    maxLength={6}
+                    value={adminConfirmPinInput}
+                    onChangeText={setAdminConfirmPinInput}
+                  />
+                </View>
+
+                {adminModalError ? <Text style={styles.errorText}>{adminModalError}</Text> : null}
+
+                <TouchableOpacity
+                  style={styles.createAdminBtn}
+                  onPress={handleCreateFirstLaunchAdmin}
+                  disabled={adminCreating}
+                >
+                  {adminCreating ? (
+                    <ActivityIndicator color="#FFFFFF" />
+                  ) : (
+                    <Text style={styles.createAdminBtnText}>Create Admin Account</Text>
+                  )}
+                </TouchableOpacity>
               </View>
-
-              <View style={styles.inputGroup}>
-                <Text style={styles.fieldLabel}>Create 6-Digit Admin PIN *:</Text>
-                <TextInput
-                  style={styles.textInputFull}
-                  placeholder="Enter 6-digit PIN"
-                  placeholderTextColor="#94A3B8"
-                  keyboardType="numeric"
-                  secureTextEntry={true}
-                  maxLength={6}
-                  value={adminPinInput}
-                  onChangeText={setAdminPinInput}
-                />
-              </View>
-
-              <View style={styles.inputGroup}>
-                <Text style={styles.fieldLabel}>Confirm Admin PIN *:</Text>
-                <TextInput
-                  style={styles.textInputFull}
-                  placeholder="Confirm 6-digit PIN"
-                  placeholderTextColor="#94A3B8"
-                  keyboardType="numeric"
-                  secureTextEntry={true}
-                  maxLength={6}
-                  value={adminConfirmPinInput}
-                  onChangeText={setAdminConfirmPinInput}
-                />
-              </View>
-
-              {adminModalError ? <Text style={styles.errorText}>{adminModalError}</Text> : null}
-
-              <TouchableOpacity
-                style={styles.createAdminBtn}
-                onPress={handleCreateFirstLaunchAdmin}
-                disabled={adminCreating}
-              >
-                {adminCreating ? (
-                  <ActivityIndicator color="#FFFFFF" />
-                ) : (
-                  <Text style={styles.createAdminBtnText}>Create Admin Account</Text>
-                )}
-              </TouchableOpacity>
             </View>
-          </View>
-        </TouchableWithoutFeedback>
-      </Modal>
+          </TouchableWithoutFeedback>
+        </Modal>
+      ) : null}
     </SafeAreaView>
   );
 }
@@ -1008,8 +1014,8 @@ const styles = StyleSheet.create({
     alignItems: 'center',
     justifyContent: 'space-between',
     paddingHorizontal: 18,
-    paddingTop: Platform.OS === 'ios' ? 48 : (StatusBar.currentHeight ? StatusBar.currentHeight + 12 : 38),
-    paddingBottom: 12,
+    paddingTop: Platform.OS === 'ios' ? 12 : 8,
+    paddingBottom: 6,
     borderBottomWidth: 1,
     elevation: 3,
     shadowColor: '#000',
@@ -1071,9 +1077,9 @@ const styles = StyleSheet.create({
   },
   globalBottomBar: {
     flexDirection: 'row',
-    paddingBottom: Platform.OS === 'ios' ? 24 : 36,
-    paddingTop: 8,
-    minHeight: Platform.OS === 'ios' ? 76 : 88,
+    paddingBottom: Platform.OS === 'ios' ? 12 : 8,
+    paddingTop: 6,
+    minHeight: 56,
     borderTopWidth: 1,
     elevation: 10,
     shadowColor: '#000',

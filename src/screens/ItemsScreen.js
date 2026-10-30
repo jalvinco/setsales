@@ -104,6 +104,12 @@ const ItemsScreen = ({ onBack, isDarkMode = false }) => {
   const [modExtraPrice, setModExtraPrice] = useState('0');
   const [modColor, setModColor] = useState(null);
 
+  // Edit Modifier Group Modal State
+  const [editingModGroup, setEditingModGroup] = useState(null);
+  const [editGroupName, setEditGroupName] = useState('');
+  const [editGroupMin, setEditGroupMin] = useState('0');
+  const [editGroupMax, setEditGroupMax] = useState('1');
+
   // Edit Modifier Choice Modal
   const [editingModifier, setEditingModifier] = useState(null);
   const [editModName, setEditModName] = useState('');
@@ -126,6 +132,7 @@ const ItemsScreen = ({ onBack, isDarkMode = false }) => {
   const [editItemPrice, setEditItemPrice] = useState('0');
   const [editItemCost, setEditItemCost] = useState('0');
   const [editItemDesc, setEditItemDesc] = useState('');
+  const [editItemIcon, setEditItemIcon] = useState('🍗');
   const [editSelectedCatId, setEditSelectedCatId] = useState(null);
   const [editSelectedTypeId, setEditSelectedTypeId] = useState(null);
   const [editSelectedModGroupIds, setEditSelectedModGroupIds] = useState([]);
@@ -156,23 +163,39 @@ const ItemsScreen = ({ onBack, isDarkMode = false }) => {
         fetchInventory(),
         fetchItemRecipes(),
       ]);
-      setCategoriesList(cats || []);
-      setItemTypesList(types || []);
+
+      const sortedCats = Array.isArray(cats)
+        ? [...cats].sort((a, b) => (a.name || '').localeCompare(b.name || ''))
+        : [];
+      setCategoriesList(sortedCats);
+
+      const sortedTypes = Array.isArray(types)
+        ? [...types].sort((a, b) => (a.name || '').localeCompare(b.name || ''))
+        : [];
+      setItemTypesList(sortedTypes);
 
       const sortedItems = Array.isArray(itms)
-        ? [...itms].sort((a, b) => (Number(b.price) || 0) - (Number(a.price) || 0))
+        ? [...itms].sort((a, b) => (a.name || '').localeCompare(b.name || ''))
         : [];
       setItemsList(sortedItems);
 
-      setModifierGroupsList(modGroups || []);
-      setModifiersList(mods || []);
+      const sortedModGroups = Array.isArray(modGroups)
+        ? [...modGroups].sort((a, b) => (a.name || '').localeCompare(b.name || ''))
+        : [];
+      setModifierGroupsList(sortedModGroups);
+
+      const sortedMods = Array.isArray(mods)
+        ? [...mods].sort((a, b) => (a.name || '').localeCompare(b.name || ''))
+        : [];
+      setModifiersList(sortedMods);
+
       setItemModGroupMappings(mappings || []);
       setInventoryList(inv || []);
       setItemRecipesList(recipes || []);
 
-      if (cats && cats.length > 0) setSelectedCatId(cats[0].id);
-      if (types && types.length > 0) setSelectedTypeId(types[0].id);
-      if (modGroups && modGroups.length > 0) setSelectedGroupForMod(modGroups[0].id);
+      if (sortedCats.length > 0) setSelectedCatId(sortedCats[0].id);
+      if (sortedTypes.length > 0) setSelectedTypeId(sortedTypes[0].id);
+      if (sortedModGroups.length > 0) setSelectedGroupForMod(sortedModGroups[0].id);
     } catch (err) {
       setErrorMsg('Error connecting to Supabase: ' + err.message);
     } finally {
@@ -197,7 +220,7 @@ const ItemsScreen = ({ onBack, isDarkMode = false }) => {
     setLoading(true);
     try {
       const created = await createCategory({ name: trimmed });
-      setCategoriesList((prev) => [created, ...prev]);
+      setCategoriesList((prev) => [...prev, created].sort((a, b) => (a.name || '').localeCompare(b.name || '')));
       setCatName('');
       setActiveTab('list');
       triggerToast('Category saved successfully!');
@@ -230,6 +253,7 @@ const ItemsScreen = ({ onBack, isDarkMode = false }) => {
       });
       setCategoriesList((prev) =>
         prev.map((c) => (c.id === editingCategory.id ? { ...c, ...updated, name: trimmed, is_active: editCatActive } : c))
+            .sort((a, b) => (a.name || '').localeCompare(b.name || ''))
       );
       setEditingCategory(null);
       triggerToast('Category saved successfully!');
@@ -280,7 +304,7 @@ const ItemsScreen = ({ onBack, isDarkMode = false }) => {
     setLoading(true);
     try {
       const created = await createItemType({ name: trimmed, color: typeColor });
-      setItemTypesList((prev) => [created, ...prev]);
+      setItemTypesList((prev) => [...prev, created].sort((a, b) => (a.name || '').localeCompare(b.name || '')));
       setTypeName('');
       setTypeColor(null);
       setActiveTab('list');
@@ -311,6 +335,7 @@ const ItemsScreen = ({ onBack, isDarkMode = false }) => {
       const updated = await updateItemType(editingItemType.id, { name: trimmed, color: editTypeColor });
       setItemTypesList((prev) =>
         prev.map((t) => (t.id === editingItemType.id ? { ...t, ...updated, name: trimmed, color: editTypeColor } : t))
+            .sort((a, b) => (a.name || '').localeCompare(b.name || ''))
       );
       setEditingItemType(null);
       triggerToast('Item Type saved successfully!');
@@ -365,12 +390,46 @@ const ItemsScreen = ({ onBack, isDarkMode = false }) => {
         min_selection: Number(groupMin) || 0,
         max_selection: Number(groupMax) || 1,
       });
-      setModifierGroupsList((prev) => [created, ...prev]);
+      setModifierGroupsList((prev) => [...prev, created].sort((a, b) => (a.name || '').localeCompare(b.name || '')));
       if (!selectedGroupForMod) setSelectedGroupForMod(created.id);
       setGroupName('');
       setActiveTab('list');
       triggerToast('Modifier Group saved successfully!');
       Keyboard.dismiss();
+    } catch (e) {
+      Alert.alert('Error', e.message);
+    } finally {
+      setLoading(false);
+    }
+  };
+
+  const handleOpenEditModifierGroup = (group) => {
+    setEditingModGroup(group);
+    setEditGroupName(group.name || '');
+    setEditGroupMin(String(group.min_selection ?? 0));
+    setEditGroupMax(String(group.max_selection ?? 1));
+  };
+
+  const handleSaveModifierGroupEdit = async () => {
+    const trimmed = editGroupName.trim();
+    if (!trimmed) {
+      Alert.alert('Required Field Missing', 'Please enter Modifier Group Name.');
+      return;
+    }
+    setLoadingText('Saving Modifier Group...');
+    setLoading(true);
+    try {
+      const updated = await updateModifierGroup(editingModGroup.id, {
+        name: trimmed,
+        min_selection: Number(editGroupMin) || 0,
+        max_selection: Number(editGroupMax) || 1,
+      });
+      setModifierGroupsList((prev) =>
+        prev.map((g) => (g.id === editingModGroup.id ? { ...g, ...updated, name: trimmed, min_selection: Number(editGroupMin) || 0, max_selection: Number(editGroupMax) || 1 } : g))
+            .sort((a, b) => (a.name || '').localeCompare(b.name || ''))
+      );
+      setEditingModGroup(null);
+      triggerToast('Modifier Group updated!');
     } catch (e) {
       Alert.alert('Error', e.message);
     } finally {
@@ -407,7 +466,7 @@ const ItemsScreen = ({ onBack, isDarkMode = false }) => {
         extra_price: Number(modExtraPrice) || 0,
         color: modColor,
       });
-      setModifiersList((prev) => [created, ...prev]);
+      setModifiersList((prev) => [...prev, created].sort((a, b) => (a.name || '').localeCompare(b.name || '')));
       setModName('');
       setModExtraPrice('0');
       setModColor(null);
@@ -444,6 +503,7 @@ const ItemsScreen = ({ onBack, isDarkMode = false }) => {
       });
       setModifiersList((prev) =>
         prev.map((m) => (m.id === editingModifier.id ? { ...m, ...updated, name: trimmed, extra_price: Number(editModExtraPrice) || 0, color: editModColor } : m))
+            .sort((a, b) => (a.name || '').localeCompare(b.name || ''))
       );
       setEditingModifier(null);
       triggerToast('Modifier saved successfully!');
@@ -544,6 +604,9 @@ const ItemsScreen = ({ onBack, isDarkMode = false }) => {
     const typeObj = itemTypesList.find((t) => String(t.id) === String(selectedTypeId));
     const itemTypeStr = typeObj ? typeObj.name : 'General';
 
+    const descText = itemDesc.trim();
+    const finalDesc = descText ? `${itemIcon} ${descText}` : itemIcon;
+
     setLoadingText('Saving Item...');
     setLoading(true);
     try {
@@ -554,7 +617,7 @@ const ItemsScreen = ({ onBack, isDarkMode = false }) => {
         type: itemTypeStr,
         category_id: selectedCatId,
         item_type_id: selectedTypeId,
-        description: `${itemIcon} ${itemDesc}`,
+        description: finalDesc,
       });
 
       if (created && created.id) {
@@ -563,7 +626,7 @@ const ItemsScreen = ({ onBack, isDarkMode = false }) => {
         }
       }
 
-      setItemsList((prev) => [created, ...prev]);
+      setItemsList((prev) => [...prev, created].sort((a, b) => (a.name || '').localeCompare(b.name || '')));
       setItemName('');
       setItemPrice('');
       setItemCost('0.00');
@@ -585,8 +648,16 @@ const ItemsScreen = ({ onBack, isDarkMode = false }) => {
     setEditItemPrice(String(item.price || 0));
     setEditItemCost(String(item.cost_amount || 0));
 
-    const parts = (item.description || '').split(' ');
-    setEditItemDesc(parts.slice(1).join(' ') || item.description || '');
+    const rawDesc = item.description || '🍗';
+    const parts = rawDesc.split(' ');
+    const firstPart = parts[0];
+    if (PRESET_ICONS.includes(firstPart)) {
+      setEditItemIcon(firstPart);
+      setEditItemDesc(parts.slice(1).join(' '));
+    } else {
+      setEditItemIcon('🍗');
+      setEditItemDesc(rawDesc);
+    }
 
     setEditSelectedCatId(item.category_id || (categoriesList[0] ? categoriesList[0].id : null));
     setEditSelectedTypeId(item.item_type_id || (itemTypesList[0] ? itemTypesList[0].id : null));
@@ -611,6 +682,9 @@ const ItemsScreen = ({ onBack, isDarkMode = false }) => {
     const typeObj = itemTypesList.find((t) => String(t.id) === String(editSelectedTypeId));
     const itemTypeStr = typeObj ? typeObj.name : 'General';
 
+    const descText = editItemDesc.trim();
+    const finalDesc = descText ? `${editItemIcon} ${descText}` : editItemIcon;
+
     setLoadingText('Saving Item...');
     setLoading(true);
     try {
@@ -621,7 +695,7 @@ const ItemsScreen = ({ onBack, isDarkMode = false }) => {
         type: itemTypeStr,
         category_id: editSelectedCatId,
         item_type_id: editSelectedTypeId,
-        description: editItemDesc,
+        description: finalDesc,
       });
 
       await setItemModifierGroups(editingItem.id, editSelectedModGroupIds);
@@ -673,7 +747,7 @@ const ItemsScreen = ({ onBack, isDarkMode = false }) => {
       }
       return true;
     })
-    .sort((a, b) => (Number(b.price) || 0) - (Number(a.price) || 0));
+    .sort((a, b) => (a.name || '').localeCompare(b.name || ''));
 
   const bgStyle = { backgroundColor: isDarkMode ? '#0F172A' : '#F8FAFC' };
   const cardBgStyle = {
@@ -779,7 +853,7 @@ const ItemsScreen = ({ onBack, isDarkMode = false }) => {
                         Cat: {catObj ? catObj.name : 'Uncategorized'} • Type: {typeObj ? typeObj.name : item.type || 'General'}
                       </Text>
                       <Text style={styles.priceText}>
-                        Price: ₱{Number(item.price || 0).toFixed(2)} • Cost: ₱{Number(item.cost_amount || 0).toFixed(2)}
+                        Price: ₱{Number(item.price || 0).toLocaleString('en-US', { minimumFractionDigits: 2, maximumFractionDigits: 2 })} • Cost: ₱{Number(item.cost_amount || 0).toLocaleString('en-US', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}
                       </Text>
                     </View>
 
@@ -811,6 +885,33 @@ const ItemsScreen = ({ onBack, isDarkMode = false }) => {
                   />
                 </View>
 
+                {/* Requirement 3: Emoji Field for Add Product Item Form */}
+                <View style={styles.inputGroup}>
+                  <Text style={[styles.fieldLabel, subTextStyle]}>Emoji Icon *:</Text>
+                  <ScrollView horizontal showsHorizontalScrollIndicator={false} style={styles.chipRow}>
+                    {PRESET_ICONS.map((icon) => (
+                      <TouchableOpacity
+                        key={icon}
+                        style={[styles.selectChip, itemIcon === icon && styles.selectChipActive]}
+                        onPress={() => setItemIcon(icon)}
+                      >
+                        <Text style={styles.selectChipText}>{icon}</Text>
+                      </TouchableOpacity>
+                    ))}
+                  </ScrollView>
+                </View>
+
+                <View style={styles.inputGroup}>
+                  <Text style={[styles.fieldLabel, subTextStyle]}>Description / Details (Optional):</Text>
+                  <TextInput
+                    style={[styles.textInputFull, cardBgStyle, titleTextStyle]}
+                    placeholder="e.g. Crispy fried chicken bucket"
+                    placeholderTextColor="#94A3B8"
+                    value={itemDesc}
+                    onChangeText={setItemDesc}
+                  />
+                </View>
+
                 <View style={styles.twoColRow}>
                   <View style={styles.colHalf}>
                     <Text style={[styles.fieldLabel, subTextStyle]}>Selling Price (₱) *:</Text>
@@ -839,7 +940,7 @@ const ItemsScreen = ({ onBack, isDarkMode = false }) => {
                 <View style={styles.inputGroup}>
                   <Text style={[styles.fieldLabel, subTextStyle]}>Category *:</Text>
                   <ScrollView horizontal showsHorizontalScrollIndicator={false} style={styles.chipRow}>
-                    {categoriesList.map((c) => (
+                    {(categoriesList || []).slice().sort((a, b) => (a.name || '').localeCompare(b.name || '')).map((c) => (
                       <TouchableOpacity
                         key={c.id}
                         style={[styles.selectChip, selectedCatId === c.id && styles.selectChipActive]}
@@ -856,7 +957,7 @@ const ItemsScreen = ({ onBack, isDarkMode = false }) => {
                 <View style={styles.inputGroup}>
                   <Text style={[styles.fieldLabel, subTextStyle]}>Item Type *:</Text>
                   <ScrollView horizontal showsHorizontalScrollIndicator={false} style={styles.chipRow}>
-                    {itemTypesList.map((t) => (
+                    {(itemTypesList || []).slice().sort((a, b) => (a.name || '').localeCompare(b.name || '')).map((t) => (
                       <TouchableOpacity
                         key={t.id}
                         style={[styles.selectChip, selectedTypeId === t.id && styles.selectChipActive]}
@@ -873,7 +974,7 @@ const ItemsScreen = ({ onBack, isDarkMode = false }) => {
                 <View style={styles.inputGroup}>
                   <Text style={[styles.fieldLabel, subTextStyle]}>Link Modifier Groups:</Text>
                   <View style={styles.modGroupCheckGrid}>
-                    {modifierGroupsList.map((mg) => {
+                    {(modifierGroupsList || []).slice().sort((a, b) => (a.name || '').localeCompare(b.name || '')).map((mg) => {
                       const isChecked = selectedModGroupIds.includes(mg.id);
                       return (
                         <TouchableOpacity
@@ -898,11 +999,11 @@ const ItemsScreen = ({ onBack, isDarkMode = false }) => {
           )
         )}
 
-        {/* ==================== SUBMENU 2: CATEGORIES ==================== */}
+        {/* ==================== SUBMENU 2: CATEGORIES (Alphabetically Sorted) ==================== */}
         {activeSubmenu === 'categories' && (
           activeTab === 'list' ? (
             <ScrollView contentContainerStyle={styles.scrollContent} showsVerticalScrollIndicator={false}>
-              {categoriesList.map((cat) => (
+              {(categoriesList || []).slice().sort((a, b) => (a.name || '').localeCompare(b.name || '')).map((cat) => (
                 <View key={cat.id} style={[styles.dataRow, cardBgStyle]}>
                   <View style={styles.dataRowInfo}>
                     <Text style={[styles.dataRowName, titleTextStyle]}>{cat.name}</Text>
@@ -946,11 +1047,11 @@ const ItemsScreen = ({ onBack, isDarkMode = false }) => {
           )
         )}
 
-        {/* ==================== SUBMENU 3: ITEM TYPES ==================== */}
+        {/* ==================== SUBMENU 3: ITEM TYPES (Alphabetically Sorted) ==================== */}
         {activeSubmenu === 'item_types' && (
           activeTab === 'list' ? (
             <ScrollView contentContainerStyle={styles.scrollContent} showsVerticalScrollIndicator={false}>
-              {itemTypesList.map((t) => (
+              {(itemTypesList || []).slice().sort((a, b) => (a.name || '').localeCompare(b.name || '')).map((t) => (
                 <View key={t.id} style={[styles.dataRow, cardBgStyle]}>
                   <View style={styles.dataRowInfo}>
                     <View style={styles.rowTypeBadgeGroup}>
@@ -1024,26 +1125,34 @@ const ItemsScreen = ({ onBack, isDarkMode = false }) => {
           )
         )}
 
-        {/* ==================== SUBMENU 4: MODIFIERS ==================== */}
+        {/* ==================== SUBMENU 4: MODIFIERS (Alphabetically Sorted) ==================== */}
         {activeSubmenu === 'modifiers' && (
           activeTab === 'list' ? (
             <ScrollView contentContainerStyle={styles.scrollContent} showsVerticalScrollIndicator={false}>
-              {modifierGroupsList.map((group) => {
-                const groupMods = modifiersList.filter((m) => String(m.group_id) === String(group.id));
+              {(modifierGroupsList || []).slice().sort((a, b) => (a.name || '').localeCompare(b.name || '')).map((group) => {
+                const groupMods = (modifiersList || [])
+                  .filter((m) => String(m.group_id) === String(group.id))
+                  .sort((a, b) => (a.name || '').localeCompare(b.name || ''));
 
                 return (
                   <View key={group.id} style={[styles.cardSection, cardBgStyle]}>
                     <View style={styles.groupHeaderRow}>
-                      <View>
+                      <View style={styles.flexOne}>
                         <Text style={[styles.cardTitle, titleTextStyle]}>{group.name}</Text>
                         <Text style={[styles.cardSubtitle, subTextStyle]}>
                           Rules: Min {group.min_selection || 0}, Max {group.max_selection || 1}
                         </Text>
                       </View>
 
-                      <TouchableOpacity style={styles.deleteBtn} onPress={() => handleDeleteModifierGroupConfirm(group)}>
-                        <Text style={styles.deleteBtnText}>Delete Group</Text>
-                      </TouchableOpacity>
+                      {/* Requirement 3: Edit Modifier Group Button */}
+                      <View style={styles.actionRow}>
+                        <TouchableOpacity style={styles.editBtn} onPress={() => handleOpenEditModifierGroup(group)}>
+                          <Text style={styles.editBtnText}>Edit Group</Text>
+                        </TouchableOpacity>
+                        <TouchableOpacity style={styles.deleteBtn} onPress={() => handleDeleteModifierGroupConfirm(group)}>
+                          <Text style={styles.deleteBtnText}>Delete Group</Text>
+                        </TouchableOpacity>
+                      </View>
                     </View>
 
                     <Text style={[styles.fieldLabel, subTextStyle]}>Modifier Choices ({groupMods.length}):</Text>
@@ -1052,7 +1161,7 @@ const ItemsScreen = ({ onBack, isDarkMode = false }) => {
                         <View style={styles.rowModNameGroup}>
                           {mod.color ? <View style={[styles.colorIndicatorPill, { backgroundColor: mod.color }]} /> : null}
                           <Text style={[styles.modChoiceName, titleTextStyle]}>
-                            • {mod.name} {Number(mod.extra_price) > 0 ? `(+₱${Number(mod.extra_price).toFixed(2)})` : ''}
+                            • {mod.name} {Number(mod.extra_price) > 0 ? `(+₱${Number(mod.extra_price).toLocaleString('en-US', { minimumFractionDigits: 2, maximumFractionDigits: 2 })})` : ''}
                           </Text>
                         </View>
 
@@ -1121,7 +1230,7 @@ const ItemsScreen = ({ onBack, isDarkMode = false }) => {
                 <View style={styles.inputGroup}>
                   <Text style={[styles.fieldLabel, subTextStyle]}>Select Group *:</Text>
                   <ScrollView horizontal showsHorizontalScrollIndicator={false} style={styles.chipRow}>
-                    {modifierGroupsList.map((g) => (
+                    {(modifierGroupsList || []).slice().sort((a, b) => (a.name || '').localeCompare(b.name || '')).map((g) => (
                       <TouchableOpacity
                         key={g.id}
                         style={[styles.selectChip, selectedGroupForMod === g.id && styles.selectChipActive]}
@@ -1278,6 +1387,55 @@ const ItemsScreen = ({ onBack, isDarkMode = false }) => {
           </TouchableWithoutFeedback>
         </Modal>
 
+        {/* MODAL: EDIT MODIFIER GROUP (Requirement 3) */}
+        <Modal visible={!!editingModGroup} transparent animationType="fade" onRequestClose={() => setEditingModGroup(null)}>
+          <TouchableWithoutFeedback onPress={Keyboard.dismiss}>
+            <View style={styles.modalOverlay}>
+              <View style={styles.editModalCard}>
+                <Text style={styles.modalTitle}>Edit Modifier Group</Text>
+                <View style={styles.inputGroup}>
+                  <Text style={styles.fieldLabel}>Group Name *:</Text>
+                  <TextInput
+                    style={styles.modalTextInput}
+                    value={editGroupName}
+                    onChangeText={setEditGroupName}
+                    placeholder="Group Name"
+                  />
+                </View>
+                <View style={styles.twoColRow}>
+                  <View style={styles.colHalf}>
+                    <Text style={styles.fieldLabel}>Min Selection:</Text>
+                    <TextInput
+                      style={styles.modalTextInput}
+                      keyboardType="numeric"
+                      value={editGroupMin}
+                      onChangeText={setEditGroupMin}
+                    />
+                  </View>
+                  <View style={styles.colHalf}>
+                    <Text style={styles.fieldLabel}>Max Selection:</Text>
+                    <TextInput
+                      style={styles.modalTextInput}
+                      keyboardType="numeric"
+                      value={editGroupMax}
+                      onChangeText={setEditGroupMax}
+                    />
+                  </View>
+                </View>
+
+                <View style={styles.modalActions}>
+                  <TouchableOpacity style={styles.cancelBtn} onPress={() => setEditingModGroup(null)}>
+                    <Text style={styles.cancelBtnText}>Cancel</Text>
+                  </TouchableOpacity>
+                  <TouchableOpacity style={styles.saveBtn} onPress={handleSaveModifierGroupEdit}>
+                    <Text style={styles.saveBtnText}>Save</Text>
+                  </TouchableOpacity>
+                </View>
+              </View>
+            </View>
+          </TouchableWithoutFeedback>
+        </Modal>
+
         {/* MODAL: EDIT MODIFIER CHOICE WITH COLOR PICKER */}
         <Modal visible={!!editingModifier} transparent animationType="fade" onRequestClose={() => setEditingModifier(null)}>
           <TouchableWithoutFeedback onPress={Keyboard.dismiss}>
@@ -1351,6 +1509,32 @@ const ItemsScreen = ({ onBack, isDarkMode = false }) => {
                     <TextInput style={styles.textInputFullModal} value={editItemName} onChangeText={setEditItemName} />
                   </View>
 
+                  <View style={styles.inputGroup}>
+                    <Text style={styles.fieldLabel}>Emoji Icon *:</Text>
+                    <ScrollView horizontal showsHorizontalScrollIndicator={false} style={styles.chipRow}>
+                      {PRESET_ICONS.map((icon) => (
+                        <TouchableOpacity
+                          key={icon}
+                          style={[styles.selectChip, editItemIcon === icon && styles.selectChipActive]}
+                          onPress={() => setEditItemIcon(icon)}
+                        >
+                          <Text style={styles.selectChipText}>{icon}</Text>
+                        </TouchableOpacity>
+                      ))}
+                    </ScrollView>
+                  </View>
+
+                  <View style={styles.inputGroup}>
+                    <Text style={styles.fieldLabel}>Description / Details (Optional):</Text>
+                    <TextInput
+                      style={styles.textInputFullModal}
+                      value={editItemDesc}
+                      onChangeText={setEditItemDesc}
+                      placeholder="e.g. Crispy fried chicken bucket"
+                      placeholderTextColor="#94A3B8"
+                    />
+                  </View>
+
                   <View style={styles.twoColRow}>
                     <View style={styles.colHalf}>
                       <Text style={styles.fieldLabel}>Price (₱) *:</Text>
@@ -1365,7 +1549,7 @@ const ItemsScreen = ({ onBack, isDarkMode = false }) => {
                   <View style={styles.inputGroup}>
                     <Text style={styles.fieldLabel}>Category *:</Text>
                     <ScrollView horizontal showsHorizontalScrollIndicator={false} style={styles.chipRow}>
-                      {categoriesList.map((c) => (
+                      {(categoriesList || []).slice().sort((a, b) => (a.name || '').localeCompare(b.name || '')).map((c) => (
                         <TouchableOpacity
                           key={c.id}
                           style={[styles.selectChip, editSelectedCatId === c.id && styles.selectChipActive]}
@@ -1382,7 +1566,7 @@ const ItemsScreen = ({ onBack, isDarkMode = false }) => {
                   <View style={styles.inputGroup}>
                     <Text style={styles.fieldLabel}>Item Type *:</Text>
                     <ScrollView horizontal showsHorizontalScrollIndicator={false} style={styles.chipRow}>
-                      {itemTypesList.map((t) => (
+                      {(itemTypesList || []).slice().sort((a, b) => (a.name || '').localeCompare(b.name || '')).map((t) => (
                         <TouchableOpacity
                           key={t.id}
                           style={[styles.selectChip, editSelectedTypeId === t.id && styles.selectChipActive]}
@@ -1399,7 +1583,7 @@ const ItemsScreen = ({ onBack, isDarkMode = false }) => {
                   <View style={styles.inputGroup}>
                     <Text style={styles.fieldLabel}>Linked Modifier Groups:</Text>
                     <View style={styles.modGroupCheckGrid}>
-                      {modifierGroupsList.map((mg) => {
+                      {(modifierGroupsList || []).slice().sort((a, b) => (a.name || '').localeCompare(b.name || '')).map((mg) => {
                         const isChecked = editSelectedModGroupIds.includes(mg.id);
                         return (
                           <TouchableOpacity

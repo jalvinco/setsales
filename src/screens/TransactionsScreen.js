@@ -4,18 +4,19 @@ import {
   View,
   Text,
   TouchableOpacity,
-  FlatList,
   StyleSheet,
+  FlatList,
   ScrollView,
   ActivityIndicator,
   TextInput,
   Alert,
+  useWindowDimensions,
 } from 'react-native';
 import { fetchOrders, updateOrderItemCancel, updateOrderTotal, fetchItems } from '../services/supabase';
 import ThermalPrintModal from '../components/ThermalPrintModal';
 
 const TransactionsScreen = ({
-  appName = 'People Log',
+  appName = 'SetSales',
   isTaxEnabled = true,
   taxRate = 5,
   onBack,
@@ -23,6 +24,9 @@ const TransactionsScreen = ({
   rolePermissions = [],
   isDarkMode = false,
 }) => {
+  const { width } = useWindowDimensions();
+  const numColumns = width >= 600 ? 2 : 1;
+
   const [loading, setLoading] = useState(false);
   const [ordersList, setOrdersList] = useState([]);
   const [itemsList, setItemsList] = useState([]);
@@ -53,6 +57,11 @@ const TransactionsScreen = ({
   useEffect(() => {
     loadOrders();
   }, []);
+
+  const formatCurrency = (val) => {
+    const num = Number(val) || 0;
+    return `₱${num.toLocaleString('en-US', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}`;
+  };
 
   const loadOrders = async () => {
     setLoading(true);
@@ -254,7 +263,7 @@ const TransactionsScreen = ({
     const changeDue = Math.max(0, tendered - Number(item.total_amount || 0));
 
     return (
-      <View style={[styles.txCard, cardBgStyle]}>
+      <View style={[styles.txCard, cardBgStyle, numColumns > 1 && styles.txCardTablet]}>
         <View style={styles.txHeader}>
           <View>
             <View style={styles.orderTitleRow}>
@@ -268,9 +277,9 @@ const TransactionsScreen = ({
             <Text style={[styles.txDate, subTextStyle]}>{formatTxDate(item.created_at)}</Text>
           </View>
           <View style={styles.txAmountGroup}>
-            <Text style={styles.txTotal}>₱{Number(item.total_amount || 0).toFixed(2)}</Text>
+            <Text style={styles.txTotal}>{formatCurrency(item.total_amount)}</Text>
             {Number(item.discount_amount) > 0 ? (
-              <Text style={styles.discountBadgeSub}>Disc: -₱{Number(item.discount_amount).toFixed(2)}</Text>
+              <Text style={styles.discountBadgeSub}>Disc: -{formatCurrency(item.discount_amount)}</Text>
             ) : null}
             <View style={styles.methodBadge}>
               <Text style={styles.methodText}>{String(item.payment_method || 'cash').toUpperCase()}</Text>
@@ -281,7 +290,7 @@ const TransactionsScreen = ({
         {isCash && tendered > 0 ? (
           <View style={styles.cashTenderedRow}>
             <Text style={styles.cashTenderedText}>
-              Tendered: ₱{tendered.toFixed(2)} • Change: ₱{changeDue.toFixed(2)}
+              Tendered: {formatCurrency(tendered)} • Change: {formatCurrency(changeDue)}
             </Text>
           </View>
         ) : null}
@@ -350,7 +359,7 @@ const TransactionsScreen = ({
 
                     {itemDisc > 0 && !isFullyCancelled ? (
                       <Text style={styles.lineItemDiscText}>
-                        └─ Item Disc: -₱{itemDisc.toFixed(2)}
+                        └─ Item Disc: -{formatCurrency(itemDisc)}
                       </Text>
                     ) : null}
 
@@ -458,8 +467,10 @@ const TransactionsScreen = ({
 
         {/* List of Transactions */}
         <FlatList
+          key={`tx_grid_${numColumns}`}
           data={filteredOrders}
           keyExtractor={(item) => String(item.id)}
+          numColumns={numColumns}
           renderItem={renderOrderCard}
           contentContainerStyle={styles.listContent}
           showsVerticalScrollIndicator={false}
@@ -558,10 +569,11 @@ const styles = StyleSheet.create({
     borderColor: '#CBD5E1',
   },
   listContent: {
-    paddingHorizontal: 16,
+    paddingHorizontal: 12,
     paddingBottom: 32,
   },
   txCard: {
+    flex: 1,
     backgroundColor: '#FFFFFF',
     borderRadius: 18,
     padding: 16,
@@ -569,6 +581,10 @@ const styles = StyleSheet.create({
     borderWidth: 1,
     borderColor: '#E2E8F0',
     elevation: 2,
+    marginHorizontal: 4,
+  },
+  txCardTablet: {
+    maxWidth: '49%',
   },
   txHeader: {
     flexDirection: 'row',

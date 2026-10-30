@@ -666,7 +666,6 @@ export async function createCompleteOrder({
     created_at: nowIso,
     payment_method: payment_method || 'cash',
     payment_method_id: payment_method_id ? Number(payment_method_id) : null,
-    subtotal: Number(subtotal) || 0,
     discount_amount: Number(discount_amount) || 0,
     cost_amount: Number(cost_total) || 0,
     payment_amount: Number(payment_amount) || Number(total_amount) || 0,
@@ -692,7 +691,6 @@ export async function createCompleteOrder({
         discount_amount: cartItem.discountAmountPerUnit
           ? cartItem.discountAmountPerUnit * cartItem.quantity
           : 0,
-        cost_amount: cartItem.unitCost ? cartItem.unitCost * cartItem.quantity : 0,
         quantity_cancelled: 0,
       };
 

@@ -4,51 +4,111 @@ import {
   View,
   Text,
   TouchableOpacity,
-  ScrollView,
   StyleSheet,
-  FlatList,
-  TextInput,
+  ScrollView,
+  ActivityIndicator,
   Modal,
+  TextInput,
   TouchableWithoutFeedback,
+  Keyboard,
 } from 'react-native';
-import UserLogsModal from '../components/UserLogsModal';
-import GroupedLogsModal from '../components/GroupedLogsModal';
-import { calculateDailyUserLogs } from '../utils/logUtils';
+import { fetchOrders, fetchDrawerHistory, fetchLogs, fetchItems } from '../services/supabase';
 
 const ReportsScreen = ({
-  orders = [],
-  itemsList = [],
-  drawerHistory = [],
-  people = [],
-  logs = [],
+  appName = 'SetSales',
   onBack,
   loggedInUser,
   rolePermissions = [],
   isDarkMode = false,
 }) => {
-  const userRole = loggedInUser ? Number(loggedInUser.role) : 3;
-  const showFinancialsTab = userRole === 1; // Admin Role 1 ONLY
-  const showStaffLogsTab = userRole === 1 || userRole === 2; // Admin and Super Crew ONLY
+  const [loading, setLoading] = useState(false);
+  const [ordersList, setOrdersList] = useState([]);
+  const [itemsList, setItemsList] = useState([]);
+  const [drawerHistoryList, setDrawerHistoryList] = useState([]);
+  const [logsList, setLogsList] = useState([]);
 
-  const [activeReportTab, setActiveReportTab] = useState(showFinancialsTab ? 'sales' : 'drawer'); // 'sales' | 'drawer' | 'attendance'
-  const [selectedPeriod, setSelectedPeriod] = useState('today'); // 'today' | 'yesterday' | 'last15' | 'thisMonth' | 'lastMonth' | 'range'
+  // Active Report Tab: 'sales' (Financials) | 'drawer' (Cash Drawer) | 'attendance' (Staff Logs)
+  const [activeReportTab, setActiveReportTab] = useState('sales');
+
+  // Filter Period: 'today' | 'yesterday' | 'last15' | 'thisMonth' | 'lastMonth' | 'range'
+  const [selectedPeriod, setSelectedPeriod] = useState('today');
   const [startDate, setStartDate] = useState('2026-10-01');
   const [endDate, setEndDate] = useState('2026-10-31');
 
-  // Daily Detail Modals State
+  // Daily Detail Modal States
   const [selectedDailySales, setSelectedDailySales] = useState(null);
   const [selectedDailyDrawer, setSelectedDailyDrawer] = useState(null);
 
-  // Modal for individual staff log history
-  const [selectedPerson, setSelectedPerson] = useState(null);
-  const [isLogsModalVisible, setIsLogsModalVisible] = useState(false);
-  const [isGroupedModalVisible, setIsGroupedModalVisible] = useState(false);
+  // Role Permissions Checks
+  const canAccessFinancials = () => {
+    if (loggedInUser && Number(loggedInUser.role) === 1) return true; // Admin role 1
+    if (loggedInUser) {
+      const uRole = Number(loggedInUser.role);
+      const permObj = (rolePermissions || []).find((r) => Number(r.role) === uRole);
+      return permObj && permObj.report === true;
+    }
+    return false;
+  };
+
+  const canAccessStaffLogs = () => {
+    if (loggedInUser && Number(loggedInUser.role) === 1) return true; // Admin role 1
+    if (loggedInUser) {
+      const uRole = Number(loggedInUser.role);
+      const permObj = (rolePermissions || []).find((r) => Number(r.role) === uRole);
+      return permObj && permObj.people === true;
+    }
+    return false;
+  };
+
+  const showFinancialsTab = canAccessFinancials();
+  const showStaffLogsTab = canAccessStaffLogs();
 
   useEffect(() => {
-    if (!showFinancialsTab && activeReportTab === 'sales') {
-      setActiveReportTab('drawer');
+    loadAllReportData();
+  }, []);
+
+  const formatCurrency = (val) => {
+    const num = Number(val) || 0;
+    return `₱${num.toLocaleString('en-US', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}`;
+  };
+
+  const loadAllReportData = async () => {
+    setLoading(true);
+    try {
+      const [ord, drw, lgs, catalogItems] = await Promise.all([
+        fetchOrders(),
+        fetchDrawerHistory(),
+        fetchLogs(),
+        fetchItems(),
+      ]);
+      setOrdersList(ord || []);
+      setDrawerHistoryList(drw || []);
+      setLogsList(lgs || []);
+      setItemsList(catalogItems || []);
+    } catch (e) {
+      console.warn('Error loading report data:', e);
+    } finally {
+      setLoading(false);
     }
-  }, [loggedInUser]);
+  };
+
+  const getLocalDateKey = (isoStr) => {
+    if (!isoStr) return null;
+    const d = new Date(isoStr);
+    if (isNaN(d.getTime())) return null;
+    const year = d.getFullYear();
+    const month = String(d.getMonth() + 1).padStart(2, '0');
+    const day = String(d.getDate()).padStart(2, '0');
+    return `${year}-${month}-${day}`;
+  };
+
+  const formatKeyToDisplayDate = (dateKeyStr) => {
+    if (!dateKeyStr) return '';
+    const parts = dateKeyStr.split('-');
+    if (parts.length < 3) return dateKeyStr;
+    const d = new Date(parseInt(parts[0], 10), parseInt(parts[1], 10) - 1, parseInt(parts[2], 10));
+    return d.toLocaleDateString(undefined, { weekday: 'short', month: 'short', day: 'numeric', year: 'numeric' });
+  };
 
   const formatDate = (isoStr) => {
     if (!isoStr) return '';
@@ -60,70 +120,52 @@ const ReportsScreen = ({
     );
   };
 
-  const getLocalDateKey = (isoStr) => {
-    if (!isoStr) return '';
-    const d = new Date(isoStr);
-    if (isNaN(d.getTime())) return '';
-    const y = d.getFullYear();
-    const m = String(d.getMonth() + 1).padStart(2, '0');
-    const day = String(d.getDate()).padStart(2, '0');
-    return `${y}-${m}-${day}`;
-  };
-
-  const formatKeyToDisplayDate = (key) => {
-    if (!key) return '';
-    const parts = key.split('-');
-    if (parts.length < 3) return key;
-    const d = new Date(Number(parts[0]), Number(parts[1]) - 1, Number(parts[2]));
-    return d.toLocaleDateString([], { weekday: 'short', month: 'short', day: 'numeric', year: 'numeric' });
-  };
-
   const isMultiDayFilter = selectedPeriod !== 'today' && selectedPeriod !== 'yesterday';
 
+  // Filter Orders for Active Period
   const getFilteredOrders = () => {
     const now = new Date();
-    const todayStart = new Date(now.getFullYear(), now.getMonth(), now.getDate(), 0, 0, 0, 0);
+    const todayStart = new Date(now.getFullYear(), now.getMonth(), now.getDate());
 
-    return orders.filter((o) => {
-      if (!o.created_at) return false;
-      const d = new Date(o.created_at);
-      if (isNaN(d.getTime())) return false;
+    return ordersList.filter((o) => {
+      if (!o || !o.created_at) return false;
+      const dDate = new Date(o.created_at);
+      if (isNaN(dDate.getTime())) return false;
 
       if (selectedPeriod === 'today') {
         return (
-          d.getFullYear() === now.getFullYear() &&
-          d.getMonth() === now.getMonth() &&
-          d.getDate() === now.getDate()
+          dDate.getFullYear() === now.getFullYear() &&
+          dDate.getMonth() === now.getMonth() &&
+          dDate.getDate() === now.getDate()
         );
       }
       if (selectedPeriod === 'yesterday') {
         const yesterday = new Date(todayStart);
         yesterday.setDate(yesterday.getDate() - 1);
         return (
-          d.getFullYear() === yesterday.getFullYear() &&
-          d.getMonth() === yesterday.getMonth() &&
-          d.getDate() === yesterday.getDate()
+          dDate.getFullYear() === yesterday.getFullYear() &&
+          dDate.getMonth() === yesterday.getMonth() &&
+          dDate.getDate() === yesterday.getDate()
         );
       }
       if (selectedPeriod === 'last15') {
-        const fifteenDaysAgo = new Date(todayStart);
-        fifteenDaysAgo.setDate(fifteenDaysAgo.getDate() - 15);
-        return d >= fifteenDaysAgo;
+        const fifteenAgo = new Date(todayStart);
+        fifteenAgo.setDate(fifteenAgo.getDate() - 15);
+        return dDate >= fifteenAgo;
       }
       if (selectedPeriod === 'thisMonth') {
-        return d.getFullYear() === now.getFullYear() && d.getMonth() === now.getMonth();
+        return dDate.getFullYear() === now.getFullYear() && dDate.getMonth() === now.getMonth();
       }
       if (selectedPeriod === 'lastMonth') {
-        const firstDayLastMonth = new Date(now.getFullYear(), now.getMonth() - 1, 1, 0, 0, 0, 0);
-        const lastDayLastMonth = new Date(now.getFullYear(), now.getMonth(), 0, 23, 59, 59, 999);
-        return d >= firstDayLastMonth && d <= lastDayLastMonth;
+        const lastMonthDate = new Date(now.getFullYear(), now.getMonth() - 1, 1);
+        return dDate.getFullYear() === lastMonthDate.getFullYear() && dDate.getMonth() === lastMonthDate.getMonth();
       }
       if (selectedPeriod === 'range') {
         if (!startDate || !endDate) return true;
         const start = new Date(startDate);
         const end = new Date(endDate);
         end.setHours(23, 59, 59, 999);
-        return d >= start && d <= end;
+        return dDate >= start && dDate <= end;
       }
       return true;
     });
@@ -131,12 +173,13 @@ const ReportsScreen = ({
 
   const filteredOrders = getFilteredOrders();
 
+  // Filter Cash Drawer History for Active Period
   const getFilteredDrawerHistory = () => {
     const now = new Date();
-    const todayStart = new Date(now.getFullYear(), now.getMonth(), now.getDate(), 0, 0, 0, 0);
+    const todayStart = new Date(now.getFullYear(), now.getMonth(), now.getDate());
 
-    return (drawerHistory || []).filter((d) => {
-      if (!d.drawer_datetime) return false;
+    return drawerHistoryList.filter((d) => {
+      if (!d || !d.drawer_datetime) return false;
       const dDate = new Date(d.drawer_datetime);
       if (isNaN(dDate.getTime())) return false;
 
@@ -157,20 +200,16 @@ const ReportsScreen = ({
         );
       }
       if (selectedPeriod === 'last15') {
-        const fifteenDaysAgo = new Date(todayStart);
-        fifteenDaysAgo.setDate(fifteenDaysAgo.getDate() - 15);
-        return dDate >= fifteenDaysAgo;
+        const fifteenAgo = new Date(todayStart);
+        fifteenAgo.setDate(fifteenAgo.getDate() - 15);
+        return dDate >= fifteenAgo;
       }
       if (selectedPeriod === 'thisMonth') {
-        return (
-          dDate.getFullYear() === now.getFullYear() &&
-          dDate.getMonth() === now.getMonth()
-        );
+        return dDate.getFullYear() === now.getFullYear() && dDate.getMonth() === now.getMonth();
       }
       if (selectedPeriod === 'lastMonth') {
-        const firstDayLastMonth = new Date(now.getFullYear(), now.getMonth() - 1, 1, 0, 0, 0, 0);
-        const lastDayLastMonth = new Date(now.getFullYear(), now.getMonth(), 0, 23, 59, 59, 999);
-        return dDate >= firstDayLastMonth && dDate <= lastDayLastMonth;
+        const lastMonthDate = new Date(now.getFullYear(), now.getMonth() - 1, 1);
+        return dDate.getFullYear() === lastMonthDate.getFullYear() && dDate.getMonth() === lastMonthDate.getMonth();
       }
       if (selectedPeriod === 'range') {
         if (!startDate || !endDate) return true;
@@ -325,7 +364,14 @@ const ReportsScreen = ({
   return (
     <SafeAreaView style={[styles.safeArea, bgStyle]}>
       <View style={styles.container}>
-        {/* Tab Navigation (Role Access Filtered) */}
+        {loading ? (
+          <View style={styles.loadingBar}>
+            <ActivityIndicator size="small" color="#2563EB" />
+            <Text style={styles.loadingBarText}>Loading Reports...</Text>
+          </View>
+        ) : null}
+
+        {/* Submenu Report Tabs Selector */}
         <View style={[styles.tabNavContainer, cardBgStyle]}>
           {showFinancialsTab ? (
             <TouchableOpacity
@@ -362,7 +408,7 @@ const ReportsScreen = ({
           ) : null}
         </View>
 
-        {/* Period Selector Chips (With Date Range option) */}
+        {/* Period Selector Chips */}
         <View style={[styles.periodBar, cardBgStyle]}>
           <ScrollView horizontal showsHorizontalScrollIndicator={false}>
             {[
@@ -411,7 +457,7 @@ const ReportsScreen = ({
           ) : null}
         </View>
 
-        {/* TAB 1: FINANCIAL SALES REPORT (Role 1 Admin Only) */}
+        {/* TAB 1: FINANCIAL SALES REPORT */}
         {activeReportTab === 'sales' && showFinancialsTab && (
           <ScrollView contentContainerStyle={styles.scrollContent} showsVerticalScrollIndicator={false}>
             {/* Grand Total Summary Box */}
@@ -422,7 +468,7 @@ const ReportsScreen = ({
               <View style={styles.statGrid}>
                 <View style={[styles.statCard, isDarkMode && styles.statCardDark]}>
                   <Text style={[styles.statLabel, subTextStyle]}>Total Sales</Text>
-                  <Text style={styles.statValBlue}>₱{grandFinStats.totalSales.toFixed(2)}</Text>
+                  <Text style={styles.statValBlue}>{formatCurrency(grandFinStats.totalSales)}</Text>
                 </View>
 
                 <View style={[styles.statCard, isDarkMode && styles.statCardDark]}>
@@ -434,12 +480,12 @@ const ReportsScreen = ({
               <View style={styles.statGrid}>
                 <View style={[styles.statCard, isDarkMode && styles.statCardDark]}>
                   <Text style={[styles.statLabel, subTextStyle]}>Product Cost</Text>
-                  <Text style={styles.statValRed}>₱{grandFinStats.totalCost.toFixed(2)}</Text>
+                  <Text style={styles.statValRed}>{formatCurrency(grandFinStats.totalCost)}</Text>
                 </View>
 
                 <View style={[styles.statCard, isDarkMode && styles.statCardDark]}>
                   <Text style={[styles.statLabel, subTextStyle]}>Net Profit</Text>
-                  <Text style={styles.statValGreen}>₱{grandFinStats.totalProfit.toFixed(2)}</Text>
+                  <Text style={styles.statValGreen}>{formatCurrency(grandFinStats.totalProfit)}</Text>
                 </View>
               </View>
 
@@ -449,7 +495,7 @@ const ReportsScreen = ({
                   Object.entries(grandFinStats.methodMap).map(([mName, mVal]) => (
                     <View key={mName} style={styles.methodRow}>
                       <Text style={[styles.methodLabel, subTextStyle]}>💳 {mName}:</Text>
-                      <Text style={[styles.methodVal, titleTextStyle]}>₱{mVal.toFixed(2)}</Text>
+                      <Text style={[styles.methodVal, titleTextStyle]}>{formatCurrency(mVal)}</Text>
                     </View>
                   ))
                 ) : (
@@ -476,7 +522,7 @@ const ReportsScreen = ({
                       <Text style={[styles.dailyTxSub, subTextStyle]}>{dayItem.txCount} transactions</Text>
                     </View>
                     <View style={styles.dailyAmountCol}>
-                      <Text style={styles.dailySalesVal}>₱{dayItem.totalSales.toFixed(2)}</Text>
+                      <Text style={styles.dailySalesVal}>{formatCurrency(dayItem.totalSales)}</Text>
                       <Text style={styles.dailyTapDetailText}>Tap details ›</Text>
                     </View>
                   </TouchableOpacity>
@@ -495,12 +541,12 @@ const ReportsScreen = ({
               <View style={styles.statGrid}>
                 <View style={[styles.statCard, isDarkMode && styles.statCardDark]}>
                   <Text style={[styles.statLabel, subTextStyle]}>Total Added Cash</Text>
-                  <Text style={styles.statValGreen}>+₱{grandDrawerTotals.totalAddedCash.toFixed(2)}</Text>
+                  <Text style={styles.statValGreen}>+{formatCurrency(grandDrawerTotals.totalAddedCash)}</Text>
                 </View>
 
                 <View style={[styles.statCard, isDarkMode && styles.statCardDark]}>
                   <Text style={[styles.statLabel, subTextStyle]}>Total Cash Expense</Text>
-                  <Text style={styles.statValRed}>-₱{grandDrawerTotals.totalExpenseCash.toFixed(2)}</Text>
+                  <Text style={styles.statValRed}>-{formatCurrency(grandDrawerTotals.totalExpenseCash)}</Text>
                 </View>
               </View>
             </View>
@@ -523,8 +569,8 @@ const ReportsScreen = ({
                       <Text style={[styles.dailyTxSub, subTextStyle]}>{dayItem.entries.length} drawer logs</Text>
                     </View>
                     <View style={styles.dailyAmountCol}>
-                      <Text style={styles.dailyAddedText}>+₱{dayItem.totalAddedCash.toFixed(2)}</Text>
-                      <Text style={styles.dailyExpenseText}>-₱{dayItem.totalExpenseCash.toFixed(2)}</Text>
+                      <Text style={styles.dailyAddedText}>+{formatCurrency(dayItem.totalAddedCash)}</Text>
+                      <Text style={styles.dailyExpenseText}>-{formatCurrency(dayItem.totalExpenseCash)}</Text>
                     </View>
                   </TouchableOpacity>
                 ))}
@@ -548,142 +594,82 @@ const ReportsScreen = ({
                         <Text style={[styles.drawerDateText, subTextStyle]}>{formatDate(item.drawer_datetime)}</Text>
                       </View>
                       {item.reason || item.notes ? (
-                        <Text style={[styles.reasonText, subTextStyle]}>Reason: {item.reason || item.notes}</Text>
+                        <Text style={[styles.drawerReasonText, titleTextStyle]}>{item.reason || item.notes}</Text>
                       ) : null}
                     </View>
 
-                    <Text style={[styles.drawerAmtText, isAdd ? styles.colorGreen : isSet ? styles.colorBlue : styles.colorRed]}>
-                      {isAdd ? '+' : isSet ? '' : '-'}₱{Number(item.amount || 0).toFixed(2)}
+                    <Text style={[styles.drawerAmtText, isSet ? styles.statValBlue : isAdd ? styles.statValGreen : styles.statValRed]}>
+                      {isSet ? '' : isAdd ? '+' : '-'}{formatCurrency(item.amount)}
                     </Text>
                   </View>
                 );
               })
             )}
-
-            {filteredDrawerHistory.length === 0 ? (
-              <View style={styles.emptyBox}>
-                <Text style={[styles.emptyTitle, subTextStyle]}>No cash drawer activity recorded for this period.</Text>
-              </View>
-            ) : null}
           </ScrollView>
         )}
 
-        {/* TAB 3: STAFF ATTENDANCE LOGS REPORT (Admin & Super Crew Only) */}
+        {/* TAB 3: STAFF LOGS REPORT */}
         {activeReportTab === 'attendance' && showStaffLogsTab && (
-          <FlatList
-            data={people}
-            keyExtractor={(item) => String(item.id)}
-            contentContainerStyle={styles.scrollContent}
-            renderItem={({ item }) => {
-              const { totalHoursFormatted, grandTotalRate } = calculateDailyUserLogs(
-                item,
-                logs,
-                selectedPeriod
-              );
+          <ScrollView contentContainerStyle={styles.scrollContent} showsVerticalScrollIndicator={false}>
+            <View style={[styles.cardSection, cardBgStyle]}>
+              <Text style={[styles.cardTitle, titleTextStyle]}>👥 Staff Login & Attendance Logs</Text>
+              <Text style={[styles.cardSubtitle, subTextStyle]}>Activity log records across staff members.</Text>
 
-              return (
-                <TouchableOpacity
-                  style={[styles.cardSection, cardBgStyle]}
-                  onPress={() => {
-                    setSelectedPerson(item);
-                    setIsLogsModalVisible(true);
-                  }}
-                  activeOpacity={0.8}
-                >
-                  <View style={styles.staffHeaderRow}>
-                    <View>
-                      <Text style={[styles.cardTitle, titleTextStyle]}>{item.name}</Text>
-                      <Text style={[styles.cardSubtitle, subTextStyle]}>
-                        Role: {Number(item.role) === 1 ? 'Admin' : 'Staff'} • Rate: ₱{item.rate || 0}/hr
-                      </Text>
-                    </View>
-                    <View style={styles.staffBadgesCol}>
-                      <View style={styles.hoursBadge}>
-                        <Text style={styles.hoursBadgeLabel}>HOURS</Text>
-                        <Text style={styles.hoursBadgeVal}>{totalHoursFormatted}</Text>
-                      </View>
-                      <View style={styles.incomeBadge}>
-                        <Text style={styles.incomeBadgeLabel}>INCOME</Text>
-                        <Text style={styles.incomeBadgeVal}>₱{grandTotalRate.toFixed(2)}</Text>
-                      </View>
-                    </View>
+              {logsList.map((log) => (
+                <View key={log.id || Math.random()} style={styles.logRow}>
+                  <View style={styles.logLeft}>
+                    <Text style={[styles.logUserName, titleTextStyle]}>{log.user_name || `User #${log.user_id}`}</Text>
+                    <Text style={[styles.logTimeText, subTextStyle]}>{formatDate(log.datetime)}</Text>
                   </View>
+                  <View style={[styles.logBadge, log.type === 'In' ? styles.badgeIn : styles.badgeOut]}>
+                    <Text style={[styles.logBadgeText, log.type === 'In' ? styles.badgeTextIn : styles.badgeTextOut]}>
+                      {log.type === 'In' ? '🟢 Logged In' : '🔴 Logged Out'}
+                    </Text>
+                  </View>
+                </View>
+              ))}
 
-                  <Text style={styles.tapToViewText}>Tap to view daily log breakdown ›</Text>
-                </TouchableOpacity>
-              );
-            }}
-            ListHeaderComponent={
-              <TouchableOpacity
-                style={styles.groupedSummaryBtn}
-                onPress={() => setIsGroupedModalVisible(true)}
-                activeOpacity={0.8}
-              >
-                <Text style={styles.groupedSummaryBtnText}>
-                  📊 View Grouped Directory Summary
-                </Text>
-              </TouchableOpacity>
-            }
-          />
+              {logsList.length === 0 ? (
+                <Text style={styles.noDataSub}>No staff activity logs recorded yet.</Text>
+              ) : null}
+            </View>
+          </ScrollView>
         )}
 
-        {/* MODAL 1: DAILY SALES FINANCIAL DETAIL */}
-        <Modal
-          visible={!!selectedDailySales}
-          transparent
-          animationType="fade"
-          onRequestClose={() => setSelectedDailySales(null)}
-        >
+        {/* MODAL 1: DAILY SALES DETAILS MODAL */}
+        <Modal visible={!!selectedDailySales} transparent animationType="fade" onRequestClose={() => setSelectedDailySales(null)}>
           <TouchableWithoutFeedback onPress={() => setSelectedDailySales(null)}>
             <View style={styles.modalOverlay}>
-              <TouchableWithoutFeedback>
-                <View style={styles.dailyDetailCard}>
-                  <Text style={styles.modalTitle}>📅 Daily Sales Details</Text>
-                  <Text style={styles.modalSubTitle}>{selectedDailySales?.displayDate}</Text>
+              <TouchableWithoutFeedback onPress={(e) => e.stopPropagation()}>
+                <View style={styles.modalCardLarge}>
+                  <Text style={styles.modalTitle}>📅 Daily Sales: {selectedDailySales?.displayDate}</Text>
+                  <Text style={styles.modalSubTitle}>Transactions Count: {selectedDailySales?.txCount || 0}</Text>
 
                   <View style={styles.statGrid}>
-                    <View style={styles.statCard}>
+                    <View style={styles.statCardModal}>
                       <Text style={styles.statLabel}>Total Sales</Text>
-                      <Text style={styles.statValBlue}>₱{selectedDailySales?.totalSales.toFixed(2)}</Text>
+                      <Text style={styles.statValBlue}>{formatCurrency(selectedDailySales?.totalSales)}</Text>
                     </View>
-
-                    <View style={styles.statCard}>
-                      <Text style={styles.statLabel}>Transactions</Text>
-                      <Text style={styles.statVal}>{selectedDailySales?.txCount}</Text>
-                    </View>
-                  </View>
-
-                  <View style={styles.statGrid}>
-                    <View style={styles.statCard}>
-                      <Text style={styles.statLabel}>Product Cost</Text>
-                      <Text style={styles.statValRed}>₱{selectedDailySales?.totalCost.toFixed(2)}</Text>
-                    </View>
-
-                    <View style={styles.statCard}>
+                    <View style={styles.statCardModal}>
                       <Text style={styles.statLabel}>Net Profit</Text>
-                      <Text style={styles.statValGreen}>₱{selectedDailySales?.totalProfit.toFixed(2)}</Text>
+                      <Text style={styles.statValGreen}>{formatCurrency(selectedDailySales?.totalProfit)}</Text>
                     </View>
                   </View>
 
-                  <View style={styles.methodBox}>
-                    <Text style={styles.methodBoxTitle}>Payment Method Breakdown:</Text>
-                    {selectedDailySales && Object.keys(selectedDailySales.methodMap).length > 0 ? (
-                      Object.entries(selectedDailySales.methodMap).map(([mName, mVal]) => (
-                        <View key={mName} style={styles.methodRow}>
-                          <Text style={styles.methodLabel}>💳 {mName}:</Text>
-                          <Text style={styles.methodVal}>₱{mVal.toFixed(2)}</Text>
-                        </View>
-                      ))
-                    ) : (
-                      <Text style={styles.noDataSub}>No method data.</Text>
-                    )}
-                  </View>
+                  <Text style={styles.methodBoxTitleModal}>Payment Method Breakdown:</Text>
+                  {selectedDailySales && selectedDailySales.methodMap && Object.keys(selectedDailySales.methodMap).length > 0 ? (
+                    Object.entries(selectedDailySales.methodMap).map(([mName, mVal]) => (
+                      <View key={mName} style={styles.methodRowModal}>
+                        <Text style={styles.methodLabelModal}>💳 {mName}:</Text>
+                        <Text style={styles.methodValModal}>{formatCurrency(mVal)}</Text>
+                      </View>
+                    ))
+                  ) : (
+                    <Text style={styles.noDataSub}>No method data for this date.</Text>
+                  )}
 
-                  <TouchableOpacity
-                    style={styles.closeBtnLarge}
-                    onPress={() => setSelectedDailySales(null)}
-                  >
-                    <Text style={styles.closeBtnLargeText}>Close</Text>
+                  <TouchableOpacity style={styles.closeBtn} onPress={() => setSelectedDailySales(null)}>
+                    <Text style={styles.closeBtnText}>Close</Text>
                   </TouchableOpacity>
                 </View>
               </TouchableWithoutFeedback>
@@ -691,42 +677,22 @@ const ReportsScreen = ({
           </TouchableWithoutFeedback>
         </Modal>
 
-        {/* MODAL 2: DAILY CASH DRAWER LOGS DETAIL */}
-        <Modal
-          visible={!!selectedDailyDrawer}
-          transparent
-          animationType="fade"
-          onRequestClose={() => setSelectedDailyDrawer(null)}
-        >
+        {/* MODAL 2: DAILY CASH DRAWER DETAILS MODAL */}
+        <Modal visible={!!selectedDailyDrawer} transparent animationType="fade" onRequestClose={() => setSelectedDailyDrawer(null)}>
           <TouchableWithoutFeedback onPress={() => setSelectedDailyDrawer(null)}>
             <View style={styles.modalOverlay}>
-              <TouchableWithoutFeedback>
-                <View style={styles.dailyDetailCardLarge}>
-                  <Text style={styles.modalTitle}>💵 Drawer Logs - {selectedDailyDrawer?.displayDate}</Text>
+              <TouchableWithoutFeedback onPress={(e) => e.stopPropagation()}>
+                <View style={styles.modalCardLarge}>
+                  <Text style={styles.modalTitle}>💵 Drawer Logs: {selectedDailyDrawer?.displayDate}</Text>
 
-                  <View style={styles.statGrid}>
-                    <View style={styles.statCard}>
-                      <Text style={styles.statLabel}>Added Cash</Text>
-                      <Text style={styles.statValGreen}>+₱{selectedDailyDrawer?.totalAddedCash.toFixed(2)}</Text>
-                    </View>
-
-                    <View style={styles.statCard}>
-                      <Text style={styles.statLabel}>Cash Expense</Text>
-                      <Text style={styles.statValRed}>-₱{selectedDailyDrawer?.totalExpenseCash.toFixed(2)}</Text>
-                    </View>
-                  </View>
-
-                  <FlatList
-                    data={selectedDailyDrawer?.entries || []}
-                    keyExtractor={(item) => String(item.id || Math.random())}
-                    style={styles.drawerEntriesList}
-                    renderItem={({ item }) => {
+                  <ScrollView style={styles.modalScroll}>
+                    {(selectedDailyDrawer?.entries || []).map((item) => {
                       const typeUpper = String(item.type || item.drawer_action_type || 'ADD').toUpperCase();
                       const isSet = typeUpper === 'SET';
                       const isAdd = typeUpper === 'ADD';
 
                       return (
-                        <View style={styles.drawerHistoryRow}>
+                        <View key={item.id || Math.random()} style={styles.drawerHistoryRowModal}>
                           <View style={styles.drawerInfoCol}>
                             <View style={styles.typeBadgeRow}>
                               <View style={[styles.typePill, isSet ? styles.typePillBlue : isAdd ? styles.typePillGreen : styles.typePillRed]}>
@@ -734,50 +700,29 @@ const ReportsScreen = ({
                                   {typeUpper}
                                 </Text>
                               </View>
-                              <Text style={styles.drawerDateText}>{formatDate(item.drawer_datetime)}</Text>
+                              <Text style={styles.drawerDateTextModal}>{formatDate(item.drawer_datetime)}</Text>
                             </View>
                             {item.reason || item.notes ? (
-                              <Text style={styles.reasonText}>Reason: {item.reason || item.notes}</Text>
+                              <Text style={styles.drawerReasonTextModal}>{item.reason || item.notes}</Text>
                             ) : null}
                           </View>
 
-                          <Text style={[styles.drawerAmtText, isAdd ? styles.colorGreen : isSet ? styles.colorBlue : styles.colorRed]}>
-                            {isAdd ? '+' : isSet ? '' : '-'}₱{Number(item.amount || 0).toFixed(2)}
+                          <Text style={[styles.drawerAmtTextModal, isSet ? styles.statValBlue : isAdd ? styles.statValGreen : styles.statValRed]}>
+                            {isSet ? '' : isAdd ? '+' : '-'}{formatCurrency(item.amount)}
                           </Text>
                         </View>
                       );
-                    }}
-                  />
+                    })}
+                  </ScrollView>
 
-                  <TouchableOpacity
-                    style={styles.closeBtnLarge}
-                    onPress={() => setSelectedDailyDrawer(null)}
-                  >
-                    <Text style={styles.closeBtnLargeText}>Close</Text>
+                  <TouchableOpacity style={styles.closeBtn} onPress={() => setSelectedDailyDrawer(null)}>
+                    <Text style={styles.closeBtnText}>Close</Text>
                   </TouchableOpacity>
                 </View>
               </TouchableWithoutFeedback>
             </View>
           </TouchableWithoutFeedback>
         </Modal>
-
-        {/* Modal 3: Individual Staff Logs Modal */}
-        <UserLogsModal
-          visible={isLogsModalVisible}
-          person={selectedPerson}
-          logs={logs}
-          period={selectedPeriod}
-          onClose={() => setIsLogsModalVisible(false)}
-        />
-
-        {/* Modal 4: Grouped Directory Logs Summary */}
-        <GroupedLogsModal
-          visible={isGroupedModalVisible}
-          people={people}
-          logs={logs}
-          period={selectedPeriod}
-          onClose={() => setIsGroupedModalVisible(false)}
-        />
       </View>
     </SafeAreaView>
   );
@@ -792,6 +737,19 @@ const styles = StyleSheet.create({
   container: {
     flex: 1,
   },
+  loadingBar: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'center',
+    backgroundColor: '#EFF6FF',
+    paddingVertical: 6,
+  },
+  loadingBarText: {
+    fontSize: 12,
+    color: '#2563EB',
+    marginLeft: 6,
+    fontWeight: '600',
+  },
   tabNavContainer: {
     flexDirection: 'row',
     backgroundColor: '#FFFFFF',
@@ -802,10 +760,10 @@ const styles = StyleSheet.create({
   },
   tabBtn: {
     flex: 1,
-    paddingVertical: 10,
+    paddingVertical: 8,
     alignItems: 'center',
     borderRadius: 12,
-    marginHorizontal: 3,
+    marginHorizontal: 4,
     backgroundColor: '#F1F5F9',
   },
   tabBtnActive: {
@@ -861,7 +819,7 @@ const styles = StyleSheet.create({
   },
   dateInput: {
     height: 40,
-    backgroundColor: '#F1F5F9',
+    backgroundColor: '#FFFFFF',
     borderRadius: 10,
     paddingHorizontal: 12,
     fontSize: 13,
@@ -870,14 +828,14 @@ const styles = StyleSheet.create({
     borderColor: '#CBD5E1',
   },
   scrollContent: {
-    padding: 20,
+    padding: 16,
     paddingBottom: 40,
   },
   cardSection: {
     backgroundColor: '#FFFFFF',
     borderRadius: 20,
     padding: 18,
-    marginBottom: 12,
+    marginBottom: 16,
     borderWidth: 1,
     borderColor: '#E2E8F0',
     elevation: 2,
@@ -886,73 +844,21 @@ const styles = StyleSheet.create({
     backgroundColor: '#FFFFFF',
     borderRadius: 20,
     padding: 18,
-    marginBottom: 14,
+    marginBottom: 16,
     borderWidth: 1,
     borderColor: '#E2E8F0',
-  },
-  groupedSummaryBtn: {
-    backgroundColor: '#1E293B',
-    borderRadius: 14,
-    padding: 14,
-    marginBottom: 12,
-    alignItems: 'center',
-  },
-  groupedSummaryBtnText: {
-    color: '#FFFFFF',
-    fontSize: 13,
-    fontWeight: '700',
-  },
-  staffHeaderRow: {
-    flexDirection: 'row',
-    justifyContent: 'space-between',
-    alignItems: 'center',
-  },
-  staffBadgesCol: {
-    alignItems: 'flex-end',
-  },
-  hoursBadge: {
-    alignItems: 'flex-end',
-    marginBottom: 4,
-  },
-  hoursBadgeLabel: {
-    fontSize: 9,
-    fontWeight: '800',
-    color: '#64748B',
-  },
-  hoursBadgeVal: {
-    fontSize: 13,
-    fontWeight: '800',
-    color: '#2563EB',
-  },
-  incomeBadge: {
-    alignItems: 'flex-end',
-  },
-  incomeBadgeLabel: {
-    fontSize: 9,
-    fontWeight: '800',
-    color: '#64748B',
-  },
-  incomeBadgeVal: {
-    fontSize: 14,
-    fontWeight: '800',
-    color: '#059669',
-  },
-  tapToViewText: {
-    fontSize: 11,
-    color: '#2563EB',
-    fontWeight: '600',
-    marginTop: 8,
+    elevation: 2,
   },
   cardTitle: {
-    fontSize: 17,
-    fontWeight: '700',
+    fontSize: 16,
+    fontWeight: '800',
     color: '#0F172A',
-    marginBottom: 2,
+    marginBottom: 4,
   },
   cardSubtitle: {
     fontSize: 12,
     color: '#64748B',
-    marginBottom: 12,
+    marginBottom: 14,
   },
   statGrid: {
     flexDirection: 'row',
@@ -977,69 +883,75 @@ const styles = StyleSheet.create({
     color: '#64748B',
   },
   statVal: {
-    fontSize: 16,
+    fontSize: 18,
     fontWeight: '800',
     color: '#0F172A',
     marginTop: 2,
   },
   statValBlue: {
-    fontSize: 16,
+    fontSize: 18,
     fontWeight: '800',
     color: '#2563EB',
     marginTop: 2,
   },
   statValRed: {
-    fontSize: 16,
+    fontSize: 18,
     fontWeight: '800',
     color: '#DC2626',
     marginTop: 2,
   },
   statValGreen: {
-    fontSize: 16,
+    fontSize: 18,
     fontWeight: '800',
     color: '#059669',
     marginTop: 2,
   },
   methodBox: {
-    backgroundColor: '#F1F5F9',
+    backgroundColor: '#F8FAFC',
     borderRadius: 14,
     padding: 12,
     marginTop: 6,
+    borderWidth: 1,
+    borderColor: '#E2E8F0',
   },
   methodBoxDark: {
     backgroundColor: '#334155',
+    borderColor: '#475569',
   },
   methodBoxTitle: {
     fontSize: 12,
     fontWeight: '700',
-    color: '#334155',
-    marginBottom: 6,
+    color: '#0F172A',
+    marginBottom: 8,
   },
   methodRow: {
     flexDirection: 'row',
     justifyContent: 'space-between',
     paddingVertical: 4,
+    borderBottomWidth: 1,
+    borderBottomColor: '#E2E8F0',
   },
   methodLabel: {
     fontSize: 12,
     color: '#475569',
   },
   methodVal: {
-    fontSize: 13,
+    fontSize: 12,
     fontWeight: '700',
     color: '#0F172A',
   },
   noDataSub: {
     fontSize: 12,
     color: '#94A3B8',
-    fontStyle: 'italic',
+    textAlign: 'center',
+    marginVertical: 8,
   },
   dailySummaryRow: {
     flexDirection: 'row',
     justifyContent: 'space-between',
     alignItems: 'center',
-    paddingVertical: 12,
-    paddingHorizontal: 10,
+    paddingVertical: 10,
+    paddingHorizontal: 12,
     backgroundColor: '#F8FAFC',
     borderRadius: 12,
     marginBottom: 8,
@@ -1054,7 +966,7 @@ const styles = StyleSheet.create({
     flex: 1,
   },
   dailyDateTitle: {
-    fontSize: 14,
+    fontSize: 13,
     fontWeight: '700',
     color: '#0F172A',
   },
@@ -1067,32 +979,31 @@ const styles = StyleSheet.create({
     alignItems: 'flex-end',
   },
   dailySalesVal: {
-    fontSize: 15,
+    fontSize: 14,
     fontWeight: '800',
     color: '#2563EB',
   },
-  dailyTapDetailText: {
-    fontSize: 11,
-    color: '#059669',
-    fontWeight: '700',
-    marginTop: 2,
-  },
   dailyAddedText: {
     fontSize: 13,
-    fontWeight: '800',
+    fontWeight: '700',
     color: '#059669',
   },
   dailyExpenseText: {
-    fontSize: 13,
-    fontWeight: '800',
+    fontSize: 12,
+    fontWeight: '700',
     color: '#DC2626',
-    marginTop: 1,
+  },
+  dailyTapDetailText: {
+    fontSize: 10,
+    fontWeight: '700',
+    color: '#64748B',
+    marginTop: 2,
   },
   drawerHistoryRow: {
     backgroundColor: '#FFFFFF',
-    borderRadius: 16,
-    padding: 14,
-    marginBottom: 10,
+    borderRadius: 14,
+    padding: 12,
+    marginBottom: 8,
     flexDirection: 'row',
     justifyContent: 'space-between',
     alignItems: 'center',
@@ -1101,6 +1012,7 @@ const styles = StyleSheet.create({
   },
   drawerInfoCol: {
     flex: 1,
+    paddingRight: 8,
   },
   typeBadgeRow: {
     flexDirection: 'row',
@@ -1138,81 +1050,153 @@ const styles = StyleSheet.create({
     fontSize: 11,
     color: '#64748B',
   },
-  reasonText: {
+  drawerReasonText: {
     fontSize: 12,
-    color: '#334155',
+    fontWeight: '600',
+    color: '#1E293B',
     marginTop: 4,
-    fontStyle: 'italic',
   },
   drawerAmtText: {
-    fontSize: 16,
+    fontSize: 15,
     fontWeight: '800',
   },
-  colorGreen: {
+  logRow: {
+    flexDirection: 'row',
+    justifyContent: 'space-between',
+    alignItems: 'center',
+    paddingVertical: 10,
+    borderBottomWidth: 1,
+    borderBottomColor: '#F1F5F9',
+  },
+  logLeft: {
+    flex: 1,
+  },
+  logUserName: {
+    fontSize: 14,
+    fontWeight: '700',
+    color: '#0F172A',
+  },
+  logTimeText: {
+    fontSize: 11,
+    color: '#64748B',
+    marginTop: 2,
+  },
+  logBadge: {
+    paddingHorizontal: 10,
+    paddingVertical: 4,
+    borderRadius: 12,
+  },
+  badgeIn: {
+    backgroundColor: '#DCFCE7',
+  },
+  badgeOut: {
+    backgroundColor: '#FEE2E2',
+  },
+  logBadgeText: {
+    fontSize: 11,
+    fontWeight: '700',
+  },
+  badgeTextIn: {
     color: '#15803D',
   },
-  colorBlue: {
-    color: '#1D4ED8',
-  },
-  colorRed: {
+  badgeTextOut: {
     color: '#B91C1C',
-  },
-  emptyBox: {
-    padding: 32,
-    alignItems: 'center',
-  },
-  emptyTitle: {
-    fontSize: 14,
-    color: '#64748B',
   },
   modalOverlay: {
     flex: 1,
-    backgroundColor: 'rgba(15, 23, 42, 0.6)',
+    backgroundColor: 'rgba(15, 23, 42, 0.65)',
     justifyContent: 'center',
     alignItems: 'center',
     padding: 20,
   },
-  dailyDetailCard: {
+  modalCardLarge: {
     width: '100%',
-    maxWidth: 350,
-    backgroundColor: '#FFFFFF',
-    borderRadius: 24,
-    padding: 20,
-  },
-  dailyDetailCardLarge: {
-    width: '100%',
-    maxWidth: 360,
+    maxWidth: 400,
     maxHeight: '80%',
     backgroundColor: '#FFFFFF',
     borderRadius: 24,
     padding: 20,
   },
   modalTitle: {
-    fontSize: 18,
+    fontSize: 17,
     fontWeight: '800',
     color: '#0F172A',
+    marginBottom: 2,
   },
   modalSubTitle: {
     fontSize: 12,
     color: '#64748B',
-    marginBottom: 14,
+    marginBottom: 12,
   },
-  drawerEntriesList: {
-    maxHeight: 280,
-    marginVertical: 10,
-  },
-  closeBtnLarge: {
-    backgroundColor: '#2563EB',
-    height: 44,
+  statCardModal: {
+    flex: 0.48,
+    backgroundColor: '#F8FAFC',
     borderRadius: 12,
-    justifyContent: 'center',
-    alignItems: 'center',
-    marginTop: 14,
+    padding: 10,
+    borderWidth: 1,
+    borderColor: '#E2E8F0',
   },
-  closeBtnLargeText: {
-    color: '#FFFFFF',
+  methodBoxTitleModal: {
+    fontSize: 12,
+    fontWeight: '700',
+    color: '#0F172A',
+    marginTop: 10,
+    marginBottom: 6,
+  },
+  methodRowModal: {
+    flexDirection: 'row',
+    justifyContent: 'space-between',
+    paddingVertical: 4,
+    borderBottomWidth: 1,
+    borderBottomColor: '#F1F5F9',
+  },
+  methodLabelModal: {
+    fontSize: 12,
+    color: '#475569',
+  },
+  methodValModal: {
+    fontSize: 12,
+    fontWeight: '700',
+    color: '#0F172A',
+  },
+  drawerHistoryRowModal: {
+    flexDirection: 'row',
+    justifyContent: 'space-between',
+    alignItems: 'center',
+    paddingVertical: 8,
+    borderBottomWidth: 1,
+    borderBottomColor: '#F1F5F9',
+  },
+  drawerDateTextModal: {
+    fontSize: 11,
+    color: '#64748B',
+  },
+  drawerReasonTextModal: {
+    fontSize: 12,
+    fontWeight: '600',
+    color: '#0F172A',
+    marginTop: 2,
+  },
+  drawerAmtTextModal: {
     fontSize: 14,
     fontWeight: '800',
+  },
+  modalScroll: {
+    maxHeight: 280,
+    marginVertical: 6,
+  },
+  closeBtn: {
+    backgroundColor: '#F1F5F9',
+    paddingVertical: 10,
+    paddingHorizontal: 16,
+    borderRadius: 12,
+    alignItems: 'center',
+    marginTop: 12,
+  },
+  closeBtnText: {
+    fontSize: 13,
+    fontWeight: '700',
+    color: '#64748B',
   },
 });
 

@@ -13,6 +13,7 @@ import {
   TouchableWithoutFeedback,
   TextInput,
   Keyboard,
+  useWindowDimensions,
 } from 'react-native';
 import {
   fetchCategories,
@@ -135,17 +136,7 @@ const RegisterScreen = ({
     if (linkedGroups.length > 0) {
       setSelectedProductForMod(product);
       setActiveModGroups(linkedGroups);
-
-      const defaultSelected = [];
-      linkedGroups.forEach((group) => {
-        const availableModsInGroup = (modifiers || []).filter(
-          (m) => m && String(m.group_id) === String(group.id) && m.is_available !== false
-        );
-        if (availableModsInGroup.length > 0 && Number(group.min_selection) > 0) {
-          defaultSelected.push(availableModsInGroup[0]);
-        }
-      });
-      setSelectedModifiersState(defaultSelected);
+      setSelectedModifiersState([]); // Do not preselect any modifiers initially
     } else {
       addToCartDirectly(product, []);
     }
@@ -416,6 +407,11 @@ const RegisterScreen = ({
     }
   };
 
+  const { width } = useWindowDimensions();
+  const numColumns = width >= 900 ? 4 : width >= 600 ? 3 : 2;
+  const leftPanelFlex = width >= 600 ? 0.65 : 0.58;
+  const rightPanelFlex = width >= 600 ? 0.35 : 0.42;
+
   // Live item total calculation for Product Modifier Modal
   const modBasePrice = Number(selectedProductForMod?.price || 0);
   const modExtraSum = (selectedModifiersState || []).reduce(
@@ -437,7 +433,7 @@ const RegisterScreen = ({
       <View style={styles.flexOne}>
         <View style={styles.mainLayout}>
           {/* LEFT PANEL: CATEGORIES & PRODUCT GRID */}
-          <View style={[styles.leftPanel, bgStyle]}>
+          <View style={[styles.leftPanel, bgStyle, { flex: leftPanelFlex }]}>
             {/* Category Filter Chips */}
             <View style={[styles.categoryBar, cardBgStyle]}>
               <ScrollView horizontal showsHorizontalScrollIndicator={false}>
@@ -458,19 +454,22 @@ const RegisterScreen = ({
               </ScrollView>
             </View>
 
-            {/* Product Cards Grid */}
+            {/* Product Cards Grid (Responsive 2, 3 or 4 columns on tablets) */}
             <FlatList
+              key={`grid_${numColumns}`}
               data={filteredProducts}
               keyExtractor={(item) => String(item.id)}
-              numColumns={2}
+              numColumns={numColumns}
               contentContainerStyle={styles.gridContent}
               renderItem={({ item }) => {
                 if (!item) return null;
                 const priceNum = Number(item.price) || 0;
                 const iconEmoji = (item.description || '🍗').split(' ')[0] || '🍗';
+                const cardWidthPercent = `${Math.floor(100 / numColumns) - 2}%`;
+
                 return (
                   <TouchableOpacity
-                    style={[styles.productCard, cardBgStyle]}
+                    style={[styles.productCard, cardBgStyle, { maxWidth: cardWidthPercent }]}
                     onPress={() => handleProductClick(item)}
                     activeOpacity={0.8}
                   >
@@ -491,7 +490,7 @@ const RegisterScreen = ({
           </View>
 
           {/* RIGHT PANEL: CART & CHECKOUT */}
-          <View style={[styles.rightPanel, cardBgStyle]}>
+          <View style={[styles.rightPanel, cardBgStyle, { flex: rightPanelFlex }]}>
             <View style={styles.cartHeader}>
               <Text style={[styles.cartTitle, titleTextStyle]}>Current Order ({cart.length})</Text>
               {cart.length > 0 ? (
@@ -654,7 +653,8 @@ const RegisterScreen = ({
                       <View style={styles.modOptionsRow}>
                         {groupMods.map((mod) => {
                           const isSelected = selectedModifiersState.some((m) => String(m.id) === String(mod.id));
-                          const customChipBg = isSelected ? '#2563EB' : mod.color || '#FFFFFF';
+                          const customChipBg = isSelected ? '#2563EB' : '#F1F5F9';
+                          const customChipTextColor = isSelected ? '#FFFFFF' : '#1E293B';
 
                           return (
                             <TouchableOpacity
@@ -667,7 +667,7 @@ const RegisterScreen = ({
                               onPress={() => handleSelectModifierChoice(group, mod)}
                               activeOpacity={0.8}
                             >
-                              <Text style={[styles.modChipText, isSelected && styles.modChipTextActive]}>
+                              <Text style={[styles.modChipText, { color: customChipTextColor }]}>
                                 {isSelected ? '✓ ' : ''}{mod.name} {Number(mod.extra_price) > 0 ? `(+₱${Number(mod.extra_price).toFixed(2)})` : ''}
                               </Text>
                             </TouchableOpacity>
